@@ -2,12 +2,11 @@
 pragma solidity ^0.8.33;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IGovernor} from "@openzeppelin/contracts/governance/IGovernor.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {IGuardianBondEscrow} from "../interfaces/IGuardianBondEscrow.sol";
 
-contract GuardianAdministrator{
-  using SafeERC20 for IERC20;
+contract GuardianAdministrator {
   using Strings for address;
   using Strings for uint256;
 
@@ -30,6 +29,7 @@ contract GuardianAdministrator{
   uint256 public minStake;
   IERC20 public immutable bondingToken;
   IGovernor public immutable governor;
+  IGuardianBondEscrow public immutable bondEscrow;
   address public immutable timelock;
   address public immutable treasury;
 
@@ -42,7 +42,6 @@ contract GuardianAdministrator{
   event GuardianBanned(address indexed guardian, uint256 stakeForfeit);
   event MinStakeUpdated(uint256 oldStake, uint256 newStake);
 
-  error GuardianAdministrator__InsufficientBalance();
   error GuardianAdministrator__AlreadyApplied();
   error GuardianAdministrator__InvalidAddress();
   error GuardianAdministrator__InvalidStatus();
@@ -52,25 +51,42 @@ contract GuardianAdministrator{
   error GuardianAdministrator__InvalidStakeAmount();
 
   modifier onlyTimelock() {
-    if(msg.sender != timelock) revert GuardianAdministrator__NotAuthorized();
+    if(msg.sender != timelock) {
+      revert GuardianAdministrator__NotAuthorized();
+    }
     _;
   }
 
   constructor(
     IERC20 bondingToken_,
     IGovernor governor_,
+    IGuardianBondEscrow bondEscrow_,
     address timelock_,
     address treasury_,
     uint256 minStake_
   ) {
-    if(address(bondingToken_) == address(0)) revert GuardianAdministrator__InvalidAddress();
-    if(address(governor_) == address(0)) revert GuardianAdministrator__InvalidAddress();
-    if (timelock_ == address(0)) revert GuardianAdministrator__InvalidAddress();
-    if (treasury_ == address(0)) revert GuardianAdministrator__InvalidAddress();
-    if (minStake_ == 0) revert GuardianAdministrator__InvalidStakeAmount();
+    if (address(bondingToken_) == address(0)) {
+      revert GuardianAdministrator__InvalidAddress();
+    }
+    if (address(governor_) == address(0)) {
+      revert GuardianAdministrator__InvalidAddress();
+    }
+    if (address(bondEscrow_) == address(0)) {
+      revert GuardianAdministrator__InvalidAddress();
+    }
+    if (timelock_ == address(0)) {
+      revert GuardianAdministrator__InvalidAddress();
+    }
+    if (treasury_ == address(0)) {
+      revert GuardianAdministrator__InvalidAddress();
+    }
+    if (minStake_ == 0) {
+      revert GuardianAdministrator__InvalidStakeAmount();
+    }
 
     bondingToken = bondingToken_;
     governor = governor_;
+    bondEscrow = bondEscrow_;
     timelock = timelock_;
     treasury = treasury_;
     minStake = minStake_;
@@ -80,15 +96,15 @@ contract GuardianAdministrator{
     address sender = msg.sender;
     GuardianDetail storage guardian = guardians[sender];
 
-    if(guardian.status != Status.Inactive)
+    if (guardian.status != Status.Inactive) {
       revert GuardianAdministrator__AlreadyApplied();
+    }
 
     guardian.status = Status.Pending;
     guardian.balance = minStake;
     guardian.blockRequest = block.number;
-    guardian.proposalId = 0;
 
-    bondingToken.safeTransferFrom(sender, address(this), minStake);
+    bondEscrow.lock(sender, minStake);
 
     address[] memory targets = new address[](1);
     uint256[] memory values = new uint256[](1);
@@ -118,12 +134,15 @@ contract GuardianAdministrator{
   }
 
   function guardianApprove(address guardian) external onlyTimelock {
+    if (guardian == address(0)) {
+      revert GuardianAdministrator__InvalidAddress();
+    }
+
     GuardianDetail storage guardianDetail = guardians[guardian];
 
-    if(guardian == address(0))
-      revert GuardianAdministrator__InvalidAddress();
-    if(guardianDetail.status != Status.Pending)
+    if (guardianDetail.status != Status.Pending) {
       revert GuardianAdministrator__InvalidStatus();
+    }
 
     guardianDetail.status = Status.Active;
 
@@ -133,24 +152,30 @@ contract GuardianAdministrator{
   function resolveRejectedApplication(address guardian) external {
     GuardianDetail storage guardianDetail = guardians[guardian];
 
-    if(guardianDetail.status != Status.Pending)
+    if (guardianDetail.status != Status.Pending) {
       revert GuardianAdministrator__NoPendingApplication();
-    
+    }
+
     IGovernor.ProposalState state = governor.state(
       guardianDetail.proposalId
     );
 
     if (
-    state != IGovernor.ProposalState.Defeated &&
-    state != IGovernor.ProposalState.Canceled &&
-    state != IGovernor.ProposalState.Expired
-    ) revert GuardianAdministrator__ProposalStillActive();
+      state != IGovernor.ProposalState.Defeated &&
+      state != IGovernor.ProposalState.Canceled &&
+      state != IGovernor.ProposalState.Expired
+    ) {
+      revert GuardianAdministrator__ProposalStillActive();
+    }
 
     uint256 refund = guardianDetail.balance;
-    guardianDetail.status  = Status.Rejected;
+
+    guardianDetail.status = Status.Rejected;
     guardianDetail.balance = 0;
 
-    bondingToken.safeTransfer(guardian, refund);
+    if (refund > 0) {
+      bondEscrow.refund(guardian, refund);
+    }
 
     emit GuardianRejected(guardian, refund);
   }
@@ -159,54 +184,66 @@ contract GuardianAdministrator{
     address sender = msg.sender;
     GuardianDetail storage guardian = guardians[sender];
 
-    if(guardian.status != Status.Active)
+    if (guardian.status != Status.Active) {
       revert GuardianAdministrator__InvalidStatus();
-    
+    }
+
     uint256 refund = guardian.balance;
+
     guardian.status = Status.Resigned;
     guardian.balance = 0;
 
-    bondingToken.safeTransfer(sender, refund);
+    if (refund > 0) {
+      bondEscrow.releaseOnResign(sender, refund);
+    }
+
     emit GuardianResigned(sender, refund);
   }
 
   function banGuardian(address guardian) external onlyTimelock {
+    if (guardian == address(0)) {
+      revert GuardianAdministrator__InvalidAddress();
+    }
+
     GuardianDetail storage guardianDetail = guardians[guardian];
 
-    if(guardian == address(0))
-      revert GuardianAdministrator__InvalidAddress();
-    if(guardianDetail.status != Status.Active)
+    if (guardianDetail.status != Status.Active) {
       revert GuardianAdministrator__InvalidStatus();
+    }
 
     uint256 forfeit = guardianDetail.balance;
+
     guardianDetail.status = Status.Banned;
     guardianDetail.balance = 0;
 
-    if(forfeit > 0) {
-      bondingToken.safeTransfer(treasury, forfeit);
+    if (forfeit > 0) {
+      bondEscrow.slashToTreasury(guardian, forfeit);
     }
 
     emit GuardianBanned(guardian, forfeit);
   }
 
   function setMinStake(uint256 newMinStake) external onlyTimelock {
-    if(newMinStake == 0) revert GuardianAdministrator__InvalidStakeAmount();
+    if (newMinStake == 0) {
+      revert GuardianAdministrator__InvalidStakeAmount();
+    }
 
-    uint256 old = minStake;
+    uint256 oldStake = minStake;
     minStake = newMinStake;
 
-    emit MinStakeUpdated(old, newMinStake);
+    emit MinStakeUpdated(oldStake, newMinStake);
   }
 
   function getGuardianDetail(address guardian)
     external
     view
-    returns(GuardianDetail memory)
+    returns (GuardianDetail memory)
   {
-    GuardianDetail storage guardianDetail =  guardians[guardian];
+    GuardianDetail storage guardianDetail = guardians[guardian];
 
-    if(guardianDetail.status == Status.Inactive)
+    if (guardianDetail.status == Status.Inactive) {
       revert GuardianAdministrator__InvalidAddress();
+    }
 
     return guardianDetail;
   }
@@ -214,12 +251,13 @@ contract GuardianAdministrator{
   function getProposalState(address guardian)
     external
     view
-    returns(IGovernor.ProposalState)
+    returns (IGovernor.ProposalState)
   {
-    GuardianDetail storage guardianDetail =  guardians[guardian];
+    GuardianDetail storage guardianDetail = guardians[guardian];
 
-    if(guardianDetail.status != Status.Pending)
+    if (guardianDetail.status != Status.Pending) {
       revert GuardianAdministrator__NoPendingApplication();
+    }
 
     return governor.state(guardianDetail.proposalId);
   }
@@ -227,7 +265,7 @@ contract GuardianAdministrator{
   function isActiveGuardian(address guardian)
     external
     view
-    returns(bool)
+    returns (bool)
   {
     return guardians[guardian].status == Status.Active;
   }

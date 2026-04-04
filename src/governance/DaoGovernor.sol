@@ -71,7 +71,7 @@ contract DaoGovernor is
     override(Governor, GovernorTimelockControl)
     returns(bool)
   {
-    super.proposalNeedsQueuing(proposalId);
+    return super.proposalNeedsQueuing(proposalId);
   }
 
   function _propose(
