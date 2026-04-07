@@ -5,8 +5,9 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IGovernanceToken} from "../interfaces/governance/IGovernanceToken.sol";
+import {CommonErrors} from "../libraries/errors/CommonErrors.sol";
 
-contract GenesisBondig is Ownable {
+contract GenesisBonding is Ownable {
   using SafeERC20 for IERC20;
 
   IERC20 public immutable purchaseToken;
@@ -36,8 +37,6 @@ contract GenesisBondig is Ownable {
     uint256 totalClaimed
   );
 
-  error GenesisBonding__ZeroAddress();
-  error GenesisBonding__ZeroAmount();
   error GenesisBonding__InvalidRate();
   error GenesisBonding__AlreadyFinalized();
   error GenesisBonding__NotFinalized();
@@ -50,10 +49,10 @@ contract GenesisBondig is Ownable {
     address treasury_,
     uint256 rate_
   ) Ownable(initialOwner) {
-    if (initialOwner == address(0)) revert GenesisBonding__ZeroAddress();
-    if (address(purchaseToken_) == address(0)) revert GenesisBonding__ZeroAddress();
-    if (address(governanceToken_) == address(0)) revert GenesisBonding__ZeroAddress();
-    if (treasury_ == address(0)) revert GenesisBonding__ZeroAddress();
+    if (initialOwner == address(0)) revert CommonErrors.ZeroAddress();
+    if (address(purchaseToken_) == address(0)) revert CommonErrors.ZeroAddress();
+    if (address(governanceToken_) == address(0)) revert CommonErrors.ZeroAddress();
+    if (treasury_ == address(0)) revert CommonErrors.ZeroAddress();
     if (rate_ == 0) revert GenesisBonding__InvalidRate();
 
     purchaseToken = purchaseToken_;
@@ -64,7 +63,7 @@ contract GenesisBondig is Ownable {
 
   function buy(uint256 paymentAmount) external {
     if (finalized) revert GenesisBonding__AlreadyFinalized();
-    if (paymentAmount == 0) revert GenesisBonding__ZeroAmount();
+    if (paymentAmount == 0) revert CommonErrors.ZeroAmount();
 
     uint256 governanceTokenAmount = paymentAmount * rate;
     purchased[msg.sender] += governanceTokenAmount;

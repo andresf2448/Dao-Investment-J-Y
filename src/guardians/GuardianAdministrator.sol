@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IGovernor} from "@openzeppelin/contracts/governance/IGovernor.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IGuardianBondEscrow} from "../interfaces/guardians/IGuardianBondEscrow.sol";
+import {CommonErrors} from "../libraries/errors/CommonErrors.sol";
 
 contract GuardianAdministrator {
   using Strings for address;
@@ -43,16 +44,13 @@ contract GuardianAdministrator {
   event MinStakeUpdated(uint256 oldStake, uint256 newStake);
 
   error GuardianAdministrator__AlreadyApplied();
-  error GuardianAdministrator__InvalidAddress();
   error GuardianAdministrator__InvalidStatus();
   error GuardianAdministrator__NoPendingApplication();
   error GuardianAdministrator__ProposalStillActive();
-  error GuardianAdministrator__NotAuthorized();
-  error GuardianAdministrator__InvalidStakeAmount();
 
   modifier onlyTimelock() {
     if(msg.sender != timelock) {
-      revert GuardianAdministrator__NotAuthorized();
+      revert CommonErrors.Unauthorized();
     }
     _;
   }
@@ -66,22 +64,22 @@ contract GuardianAdministrator {
     uint256 minStake_
   ) {
     if (address(bondingToken_) == address(0)) {
-      revert GuardianAdministrator__InvalidAddress();
+      revert CommonErrors.ZeroAddress();
     }
     if (address(governor_) == address(0)) {
-      revert GuardianAdministrator__InvalidAddress();
+      revert CommonErrors.ZeroAddress();
     }
     if (address(bondEscrow_) == address(0)) {
-      revert GuardianAdministrator__InvalidAddress();
+      revert CommonErrors.ZeroAddress();
     }
     if (timelock_ == address(0)) {
-      revert GuardianAdministrator__InvalidAddress();
+      revert CommonErrors.ZeroAddress();
     }
     if (treasury_ == address(0)) {
-      revert GuardianAdministrator__InvalidAddress();
+      revert CommonErrors.ZeroAddress();
     }
     if (minStake_ == 0) {
-      revert GuardianAdministrator__InvalidStakeAmount();
+      revert CommonErrors.ZeroAmount();
     }
 
     bondingToken = bondingToken_;
@@ -135,7 +133,7 @@ contract GuardianAdministrator {
 
   function guardianApprove(address guardian) external onlyTimelock {
     if (guardian == address(0)) {
-      revert GuardianAdministrator__InvalidAddress();
+      revert CommonErrors.ZeroAddress();
     }
 
     GuardianDetail storage guardianDetail = guardians[guardian];
@@ -202,7 +200,7 @@ contract GuardianAdministrator {
 
   function banGuardian(address guardian) external onlyTimelock {
     if (guardian == address(0)) {
-      revert GuardianAdministrator__InvalidAddress();
+      revert CommonErrors.ZeroAddress();
     }
 
     GuardianDetail storage guardianDetail = guardians[guardian];
@@ -225,7 +223,7 @@ contract GuardianAdministrator {
 
   function setMinStake(uint256 newMinStake) external onlyTimelock {
     if (newMinStake == 0) {
-      revert GuardianAdministrator__InvalidStakeAmount();
+      revert CommonErrors.ZeroAmount();
     }
 
     uint256 oldStake = minStake;
@@ -242,7 +240,7 @@ contract GuardianAdministrator {
     GuardianDetail storage guardianDetail = guardians[guardian];
 
     if (guardianDetail.status == Status.Inactive) {
-      revert GuardianAdministrator__InvalidAddress();
+      revert CommonErrors.ZeroAddress();
     }
 
     return guardianDetail;

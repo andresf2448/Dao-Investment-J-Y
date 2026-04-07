@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IGuardianBondEscrow} from "../interfaces/guardians/IGuardianBondEscrow.sol";
+import {CommonErrors} from "../libraries/errors/CommonErrors.sol";
 
 contract GuardianBondEscrow is IGuardianBondEscrow, AccessControl {
   using SafeERC20 for IERC20;
@@ -30,8 +31,6 @@ contract GuardianBondEscrow is IGuardianBondEscrow, AccessControl {
     address indexed treasury
   );
 
-  error GuardianBondEscrow__ZeroAddress();
-  error GuardianBondEscrow__InvalidAmount();
   error GuardianBondEscrow__InsufficientBond();
   error GuardianBondEscrow__SameGuardianAdministrator();
 
@@ -42,16 +41,16 @@ contract GuardianBondEscrow is IGuardianBondEscrow, AccessControl {
     address guardianAdministrator_
   ) {
     if (address(bondingToken_) == address(0)) {
-      revert GuardianBondEscrow__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
     if (treasury_ == address(0)) {
-      revert GuardianBondEscrow__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
     if (adminProtocol_ == address(0)) {
-      revert GuardianBondEscrow__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
     if (guardianAdministrator_ == address(0)) {
-      revert GuardianBondEscrow__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
 
     bondingToken = bondingToken_;
@@ -67,7 +66,7 @@ contract GuardianBondEscrow is IGuardianBondEscrow, AccessControl {
     onlyRole(DEFAULT_ADMIN_ROLE)
   {
     if (newGuardianAdministrator_ == address(0)) {
-      revert GuardianBondEscrow__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
 
     address oldGuardianAdministrator = guardianAdministrator;
@@ -91,8 +90,8 @@ contract GuardianBondEscrow is IGuardianBondEscrow, AccessControl {
     external
     onlyRole(GUARDIAN_ADMINISTRATOR_ROLE)
   {
-    if (guardian == address(0)) revert GuardianBondEscrow__ZeroAddress();
-    if (amount == 0) revert GuardianBondEscrow__InvalidAmount();
+    if (guardian == address(0)) revert CommonErrors.ZeroAddress();
+    if (amount == 0) revert CommonErrors.ZeroAmount();
 
     _bonded[guardian] += amount;
     bondingToken.safeTransferFrom(guardian, address(this), amount);
@@ -104,8 +103,8 @@ contract GuardianBondEscrow is IGuardianBondEscrow, AccessControl {
     external
     onlyRole(GUARDIAN_ADMINISTRATOR_ROLE)
   {
-    if (guardian == address(0)) revert GuardianBondEscrow__ZeroAddress();
-    if (amount == 0) revert GuardianBondEscrow__InvalidAmount();
+    if (guardian == address(0)) revert CommonErrors.ZeroAddress();
+    if (amount == 0) revert CommonErrors.ZeroAmount();
 
     uint256 currentBond = _bonded[guardian];
     if (currentBond < amount) revert GuardianBondEscrow__InsufficientBond();
@@ -120,8 +119,8 @@ contract GuardianBondEscrow is IGuardianBondEscrow, AccessControl {
     external
     onlyRole(GUARDIAN_ADMINISTRATOR_ROLE)
   {
-    if (guardian == address(0)) revert GuardianBondEscrow__ZeroAddress();
-    if (amount == 0) revert GuardianBondEscrow__InvalidAmount();
+    if (guardian == address(0)) revert CommonErrors.ZeroAddress();
+    if (amount == 0) revert CommonErrors.ZeroAmount();
 
     uint256 currentBond = _bonded[guardian];
     if (currentBond < amount) revert GuardianBondEscrow__InsufficientBond();
@@ -136,8 +135,8 @@ contract GuardianBondEscrow is IGuardianBondEscrow, AccessControl {
     external
     onlyRole(GUARDIAN_ADMINISTRATOR_ROLE)
   {
-    if (guardian == address(0)) revert GuardianBondEscrow__ZeroAddress();
-    if (amount == 0) revert GuardianBondEscrow__InvalidAmount();
+    if (guardian == address(0)) revert CommonErrors.ZeroAddress();
+    if (amount == 0) revert CommonErrors.ZeroAmount();
 
     uint256 currentBond = _bonded[guardian];
     if (currentBond < amount) revert GuardianBondEscrow__InsufficientBond();

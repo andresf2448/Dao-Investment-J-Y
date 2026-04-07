@@ -6,6 +6,7 @@ import {UUPSUpgradeable} from "@openzeppelin-upgradeable/proxy/utils/UUPSUpgrade
 import {AccessControlUpgradeable} from "@openzeppelin-upgradeable/access/AccessControlUpgradeable.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IRiskManager} from "../interfaces/execution/IRiskManager.sol";
+import {CommonErrors} from "../libraries/errors/CommonErrors.sol";
 
 contract RiskManager is
   Initializable,
@@ -42,12 +43,10 @@ contract RiskManager is
   );
   event ExecutionPausedSet(bool paused);
 
-  error RiskManager__ZeroAddress();
   error RiskManager__InvalidHeartbeat();
   error RiskManager__InvalidBpsRange();
   error RiskManager__ExecutionPaused();
   error RiskManager__AssetNotEnabled();
-  error RiskManager__FeedNotSet();
   error RiskManager__InvalidPrice();
   error RiskManager__StalePrice();
   error RiskManager__InvalidRound();
@@ -62,7 +61,7 @@ contract RiskManager is
     address emergencyOperator_
   ) external initializer {
     if(admin_ == address(0) || emergencyOperator_ == address(0))
-      revert RiskManager__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
 
     __AccessControl_init();
 
@@ -81,7 +80,7 @@ contract RiskManager is
     bool enabled
   ) external onlyRole(MANAGER_ROLE) {
     if(asset == address(0) || feed == address(0))
-      revert RiskManager__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
 
     if (heartbeat == 0) revert RiskManager__InvalidHeartbeat();
 
@@ -145,7 +144,7 @@ contract RiskManager is
 
     AssetConfig memory config = _assetConfigs[asset];
     if(!config.enabled) revert RiskManager__ExecutionPaused();
-    if(config.feed == address(0)) revert RiskManager__FeedNotSet();
+    if(config.feed == address(0)) revert CommonErrors.ZeroAddress();
 
     uint256 normalizedPrice = _validatedPrice(config);
 
@@ -166,7 +165,7 @@ contract RiskManager is
   {
     AssetConfig memory config = _assetConfigs[asset];
     if(!config.enabled) revert RiskManager__AssetNotEnabled();
-    if(config.feed == address(0)) revert RiskManager__FeedNotSet();
+    if(config.feed == address(0)) revert CommonErrors.ZeroAddress();
 
     return _validatedPrice(config);
   }

@@ -5,6 +5,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {CommonErrors} from "../libraries/errors/CommonErrors.sol";
 
 contract Treasury is ReentrancyGuardTransient {
   using SafeERC20 for IERC20;
@@ -32,20 +33,17 @@ contract Treasury is ReentrancyGuardTransient {
     bytes result
   );
 
-  error Treasury__NotAuthorized();
-  error Treasury__ZeroAddress();
-  error Treasury__ZeroAmount();
   error Treasury__InsufficientNativeBalance();
   error Treasury__CallFailed();
 
   modifier onlyTimelock() {
-    if(msg.sender != timelock) revert Treasury__NotAuthorized();
+    if(msg.sender != timelock) revert CommonErrors.Unauthorized();
     _;
   }
 
   constructor(address timelock_) {
-    if(timelock_ == address(0)) revert Treasury__ZeroAddress();
-    timelock == timelock_;
+    if(timelock_ == address(0)) revert CommonErrors.ZeroAddress();
+    timelock = timelock_;
   }
 
   receive() external payable {
@@ -58,9 +56,9 @@ contract Treasury is ReentrancyGuardTransient {
     uint256 amount
   ) external onlyTimelock nonReentrant {
     if (token == address(0) || to == address(0)) {
-      revert Treasury__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
-    if (amount == 0) revert Treasury__ZeroAmount();
+    if (amount == 0) revert CommonErrors.ZeroAmount();
 
     IERC20(token).safeTransfer(to, amount);
 
@@ -71,8 +69,8 @@ contract Treasury is ReentrancyGuardTransient {
     address payable to,
     uint256 amount
   ) external onlyTimelock nonReentrant {
-    if (to == address(0)) revert Treasury__ZeroAddress();
-    if (amount == 0) revert Treasury__ZeroAmount();
+    if (to == address(0)) revert CommonErrors.ZeroAddress();
+    if (amount == 0) revert CommonErrors.ZeroAmount();
     if (address(this).balance < amount) {
       revert Treasury__InsufficientNativeBalance();
     }
@@ -92,7 +90,7 @@ contract Treasury is ReentrancyGuardTransient {
     nonReentrant
     returns(bytes memory result)
   {
-    if (target == address(0)) revert Treasury__ZeroAddress();
+    if (target == address(0)) revert CommonErrors.ZeroAddress();
 
     (bool success, bytes memory returndata) = target.call{value: value}(data);
     if(!success) revert Treasury__CallFailed();
@@ -106,7 +104,7 @@ contract Treasury is ReentrancyGuardTransient {
   }
 
   function erc20Balance(address token) external view returns(uint256) {
-    if(token == address(0)) revert Treasury__ZeroAddress();
+    if(token == address(0)) revert CommonErrors.ZeroAddress();
     return IERC20(token).balanceOf(address(this));
   }
 }

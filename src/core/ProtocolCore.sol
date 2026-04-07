@@ -4,6 +4,7 @@ pragma solidity ^0.8.33;
 import {Initializable} from "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin-upgradeable/access/AccessControlUpgradeable.sol";
+import {CommonErrors} from "../libraries/errors/CommonErrors.sol";
 
 contract ProtocolCore is
   Initializable,
@@ -22,8 +23,6 @@ contract ProtocolCore is
   event VaultCreationPauseSet(bool paused);
   event DepositsPauseSet(bool paused);
 
-  error ProtocolCore__ZeroAddress();
-
   constructor() {
     _disableInitializers();
   }
@@ -33,7 +32,7 @@ contract ProtocolCore is
     address emergencyOperator_
   ) external initializer {
     if(admin_ == address(0) || emergencyOperator_ == address(0))
-      revert ProtocolCore__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
 
     __AccessControl_init();
 
@@ -46,7 +45,7 @@ contract ProtocolCore is
     address asset,
     bool allowed
   ) external onlyRole(MANAGER_ROLE) {
-    if (asset == address(0)) revert ProtocolCore__ZeroAddress();
+    if (asset == address(0)) revert CommonErrors.ZeroAddress();
     _supportedAssets[asset] = allowed;
     emit SupportedAssetSet(asset, allowed);
   }

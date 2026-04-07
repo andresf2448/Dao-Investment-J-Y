@@ -5,6 +5,7 @@ import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IStrategyAdapter} from "../../interfaces/adapters/IStrategyAdapter.sol";
 import {IVaultStrategyExecutor} from "../../interfaces/vaults/IVaultStrategyExecutor.sol";
 import {IAaveV3Pool} from "./interfaces/IAaveV3Pool.sol";
+import {CommonErrors} from "../../libraries/errors/CommonErrors.sol";
 
 contract AaveV3Adapter is IStrategyAdapter {
   enum Action {
@@ -23,8 +24,6 @@ contract AaveV3Adapter is IStrategyAdapter {
   );
 
   error AaveV3Adapter__NotRouter();
-  error AaveV3Adapter__ZeroAddress();
-  error AaveV3Adapter__ZeroAmount();
   error AaveV3Adapter__InvalidAction();
 
   modifier onlyRouter() {
@@ -34,7 +33,7 @@ contract AaveV3Adapter is IStrategyAdapter {
 
   constructor(address router_, address pool_) {
     if(router_ == address(0) || pool_ == address(0))
-      revert AaveV3Adapter__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     
     router = router_;
     pool = IAaveV3Pool(pool_);
@@ -49,7 +48,7 @@ contract AaveV3Adapter is IStrategyAdapter {
 
     (uint8 actionRaw, uint256 amount) = abi.decode(data, (uint8, uint256));
 
-    if(amount == 0) revert AaveV3Adapter__ZeroAmount();
+    if(amount == 0) revert CommonErrors.ZeroAmount();
     if(actionRaw > uint8(Action.Withdraw))
       revert AaveV3Adapter__InvalidAction();
 

@@ -12,6 +12,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {IProtocolCore} from "../../interfaces/core/IProtocolCore.sol";
 import {IStrategyRouter} from "../../interfaces/execution/IStrategyRouter.sol";
 import {IVaultStrategyExecutor} from "../../interfaces/vaults/IVaultStrategyExecutor.sol";
+import {CommonErrors} from "../../libraries/errors/CommonErrors.sol";
 
 contract VaultImplementation is
   Initializable,
@@ -39,7 +40,6 @@ contract VaultImplementation is
     address router,
     address core
   );
-
   event RouterUpdated(address indexed olfRouter, address indexed newRouter);
   event CoreUpdated(address indexed oldCore, address indexed newCore);
   event StrategyExecutionRequest(
@@ -59,7 +59,6 @@ contract VaultImplementation is
     uint256 amount
   );
 
-  error VaultImplementation__ZeroAddress();
   error VaultImplementation__NotFactory();
   error VaultImplementation__DepositsPaused();
   error VaultImplementation__NotRouter();
@@ -92,7 +91,7 @@ contract VaultImplementation is
       router_ == address(0) ||
       core_ == address(0)
     ) {
-      revert VaultImplementation__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
 
     if(msg.sender != factory_) revert VaultImplementation__NotFactory();
@@ -121,7 +120,7 @@ contract VaultImplementation is
   }
 
   function setRouter(address newRouter) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    if(newRouter == address(0)) revert VaultImplementation__ZeroAddress();
+    if(newRouter == address(0)) revert CommonErrors.ZeroAddress();
 
     address oldRouter = router;
     router = newRouter;
@@ -130,7 +129,7 @@ contract VaultImplementation is
   }
 
   function setCore(address newCore) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    if(newCore == address(0)) revert VaultImplementation__ZeroAddress();
+    if(newCore == address(0)) revert CommonErrors.ZeroAddress();
 
     address oldCore = core;
     core = newCore;
@@ -205,7 +204,7 @@ contract VaultImplementation is
     address adapter,
     bytes calldata data
   ) external onlyRole(GUARDIAN_ROLE) whenNotPaused {
-    if(adapter == address(0)) revert VaultImplementation__ZeroAddress();
+    if(adapter == address(0)) revert CommonErrors.ZeroAddress();
 
     emit StrategyExecutionRequest(msg.sender, adapter, data);
 
@@ -228,7 +227,7 @@ contract VaultImplementation is
     returns(bytes memory result)
   {
     if(target == address(0))
-      revert VaultImplementation__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
 
     (bool success, bytes memory returndata) = target.call{value: value}(data);
     if(!success) revert VaultImplementation__ExternalCallFailed();
@@ -243,7 +242,7 @@ contract VaultImplementation is
     uint256 amount
   ) external override onlyRouter {
     if(token == address(0) || spender == address(0))
-      revert VaultImplementation__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
 
     IERC20(token).forceApprove(spender, amount);
     emit RouterTokenApprovalSet(token, spender, amount);

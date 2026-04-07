@@ -7,6 +7,7 @@ import {AccessControlUpgradeable} from "@openzeppelin-upgradeable/access/AccessC
 import {IStrategyAdapter} from "../interfaces/adapters/IStrategyAdapter.sol";
 import {IRiskManager} from "../interfaces/execution/IRiskManager.sol";
 import {IStrategyRouter} from "../interfaces/execution/IStrategyRouter.sol";
+import {CommonErrors} from "../libraries/errors/CommonErrors.sol";
 
 contract StrategyRouter is
   Initializable,
@@ -29,9 +30,7 @@ contract StrategyRouter is
     bytes data
   );
 
-  error StrategyRouter__ZeroAddress();
   error StrategyRouter__AdapterNotAllowed();
-  error StrategyRouter__RiskManagerNotSet();
 
   constructor() {
     _disableInitializers();
@@ -42,7 +41,7 @@ contract StrategyRouter is
     address riskManager_
   ) external initializer {
     if(admin_ == address(0) || riskManager_ == address(0)) {
-      revert StrategyRouter__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
 
     __AccessControl_init();
@@ -58,7 +57,7 @@ contract StrategyRouter is
     bool allowed
   ) external onlyRole(ADAPTER_MANAGER_ROLE) {
     if(adapter == address(0))
-      revert StrategyRouter__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
 
       allowedAdapters[adapter] = allowed;
   }
@@ -67,7 +66,7 @@ contract StrategyRouter is
     address newRiskManager
   ) external onlyRole(DEFAULT_ADMIN_ROLE) {
     if(newRiskManager == address(0))
-      revert StrategyRouter__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
 
     address oldRiskManager = riskManager;
     riskManager = newRiskManager;
@@ -85,7 +84,7 @@ contract StrategyRouter is
       revert StrategyRouter__AdapterNotAllowed();
 
     if(riskManager == address(0))
-      revert StrategyRouter__RiskManagerNotSet();
+      revert CommonErrors.ZeroAddress();
 
     IRiskManager(riskManager).validateExecution(vault, asset, adapter, data);
     IStrategyAdapter(adapter).execute(vault, data);

@@ -7,6 +7,7 @@ import {IGuardianRegistry} from "../../interfaces/guardians/IGuardianRegistry.so
 import {IVaultRegistry} from "../../interfaces/vaults/IVaultRegistry.sol";
 import {IVault} from "../../interfaces/vaults/IVault.sol";
 import {IProtocolCore} from "../../interfaces/core/IProtocolCore.sol";
+import {CommonErrors} from "../../libraries/errors/CommonErrors.sol";
 
 contract VaultFactory is AccessControl {
   address public immutable implementation;
@@ -30,7 +31,6 @@ contract VaultFactory is AccessControl {
   event GuardianRegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
   event VaultRegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
 
-  error VaultFactory__ZeroAddress();
   error VaultFactory__GuardianNotActive();
   error VaultFactory__VaultAlreadyExists();
   error VaultFactory__AlreadyDeployed();
@@ -57,7 +57,7 @@ contract VaultFactory is AccessControl {
       core_ == address(0) ||
       vaultAdmin_ == address(0)
     ) {
-      revert VaultFactory__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
 
     implementation = implementation_;
@@ -107,7 +107,7 @@ contract VaultFactory is AccessControl {
     string calldata symbol
   ) external returns(address vault, bytes32 salt) {
     if (guardian == address(0) || asset == address(0)) {
-      revert VaultFactory__ZeroAddress();
+      revert CommonErrors.ZeroAddress();
     }
 
     if (msg.sender != guardian)
@@ -183,7 +183,7 @@ contract VaultFactory is AccessControl {
   }
 
   function setRouter(address newRouter) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    if(newRouter == address(0)) revert VaultFactory__ZeroAddress();
+    if(newRouter == address(0)) revert CommonErrors.ZeroAddress();
 
     address oldRouter = router;
     router = newRouter;
@@ -192,7 +192,7 @@ contract VaultFactory is AccessControl {
   }
 
   function setCore(address newCore) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    if(newCore == address(0)) revert VaultFactory__ZeroAddress();
+    if(newCore == address(0)) revert CommonErrors.ZeroAddress();
 
     address oldCore = core;
     core = newCore;
@@ -204,7 +204,7 @@ contract VaultFactory is AccessControl {
     external
     onlyRole(DEFAULT_ADMIN_ROLE)
   {
-    if(newGuardianRegistry == address(0)) revert VaultFactory__ZeroAddress();
+    if(newGuardianRegistry == address(0)) revert CommonErrors.ZeroAddress();
 
     address oldRegistry = guardianRegistry;
     guardianRegistry = newGuardianRegistry;
@@ -216,7 +216,7 @@ contract VaultFactory is AccessControl {
     external
     onlyRole(DEFAULT_ADMIN_ROLE)
   {
-    if(newVaultRegistry == address(0)) revert VaultFactory__ZeroAddress();
+    if(newVaultRegistry == address(0)) revert CommonErrors.ZeroAddress();
 
     address oldRegistry = vaultRegistry;
     vaultRegistry = newVaultRegistry;

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {CommonErrors} from "../../libraries/errors/CommonErrors.sol";
 
 contract VaultRegistry is AccessControl {
   struct VaultDetail {
@@ -32,11 +33,6 @@ contract VaultRegistry is AccessControl {
     uint256 deactivatedAt
   );
 
-  error VaultRegistry__InvalidVaultAddress();
-  error VaultRegistry__InvalidGuardianAddress();
-  error VaultRegistry__InvalidAssetAddress();
-  error VaultRegistry__InvalidAdminAddress();
-  error VaultRegistry__InvalidFactoryAddress();
   error VaultRegistry__AlreadyRegistered();
   error VaultRegistry__PairAlreadyExists();
   error VaultRegistry__VaultNotRegistered();
@@ -44,8 +40,8 @@ contract VaultRegistry is AccessControl {
   error VaultRegistry__NotVaultGuardian();
 
   constructor(address admin, address factory) {
-    if(admin == address(0)) revert VaultRegistry__InvalidAdminAddress();
-    if(factory == address(0)) revert VaultRegistry__InvalidFactoryAddress();
+    if(admin == address(0)) revert CommonErrors.ZeroAddress();
+    if(factory == address(0)) revert CommonErrors.ZeroAddress();
 
     _grantRole(DEFAULT_ADMIN_ROLE, admin);
     _grantRole(FACTORY_ROLE, factory);
@@ -59,9 +55,9 @@ contract VaultRegistry is AccessControl {
     external
     onlyRole(FACTORY_ROLE)
   {
-    if (vault == address(0)) revert VaultRegistry__InvalidVaultAddress();
-    if (guardian == address(0)) revert VaultRegistry__InvalidGuardianAddress();
-    if (asset == address(0)) revert VaultRegistry__InvalidAssetAddress();
+    if (vault == address(0)) revert CommonErrors.ZeroAddress();
+    if (guardian == address(0)) revert CommonErrors.ZeroAddress();
+    if (asset == address(0)) revert CommonErrors.ZeroAddress();
     if (isRegistered[vault]) revert VaultRegistry__AlreadyRegistered();
     if (vaultByAssetGuardian[asset][guardian] != address(0))
       revert VaultRegistry__PairAlreadyExists();
