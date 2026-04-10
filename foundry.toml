@@ -5,8 +5,8 @@ libs = ["lib"]
 via-ir = true
 
 remappings = [
-  "@openzeppelin/=lib/openzeppelin-contracts/",
-  "@openzeppelin-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
   "@chainlink/=lib/chainlink-brownie-contracts/"
 ]
 

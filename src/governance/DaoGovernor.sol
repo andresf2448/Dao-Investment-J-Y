@@ -23,14 +23,14 @@ contract DaoGovernor is
   uint32 minVotingPeriod; 
 
   constructor(
-    IVotes token,
+    IVotes governanceToken,
     TimelockController timelock,
     uint256 minProposalThreshold_,
     uint48 minVotingDelay_,
     uint32 minVotingPeriod_
   )
     Governor("DaoGovernor")
-    GovernorVotes(token)
+    GovernorVotes(governanceToken)
     GovernorVotesQuorumFraction(4)
     GovernorTimelockControl(timelock)
   {
