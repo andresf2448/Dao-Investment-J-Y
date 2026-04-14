@@ -110,25 +110,6 @@ contract Treasury is ReentrancyGuardTransient, AccessControl {
     emit NativeWithdrawn(to, amount);
   }
 
-  // function execute(
-  //   address target,
-  //   uint256 value,
-  //   bytes calldata data
-  // )
-  //   external
-  //   onlyRole(DEFAULT_ADMIN_ROLE)
-  //   nonReentrant
-  //   returns(bytes memory result)
-  // {
-  //   if (target == address(0)) revert CommonErrors.ZeroAddress();
-
-  //   (bool success, bytes memory returndata) = target.call{value: value}(data);
-  //   if(!success) revert Treasury__CallFailed();
-
-  //   emit ExternalCallExecuted(target, value, data, returndata);
-  //   return returndata;
-  // }
-
   function nativeBalance() external view returns(uint256) {
     return address(this).balance;
   }
