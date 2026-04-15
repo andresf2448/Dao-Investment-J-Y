@@ -6,6 +6,10 @@ via_ir = true
 optimizer = true
 optimizer_runs = 200
 
+fs_permissions = [
+  { access = "read-write", path = "./deployments" }
+]
+
 remappings = [
   "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
