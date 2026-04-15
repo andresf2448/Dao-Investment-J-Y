@@ -19,112 +19,248 @@ import {DeployVaultFactory} from "./DeployVaultFactory.s.sol";
 import {DeployAaveV3Adapter} from "./DeployAaveV3Adapter.s.sol";
 
 contract DeployInvestmentDao is Script {
-    function run() external {
-        HelperConfig config = new HelperConfig();
-        HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
-        address deployer = vm.addr(networkConfig.deployerPrivateKey);
+  function run() external {
+    HelperConfig config = new HelperConfig();
+    HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
+    address deployer = vm.addr(networkConfig.deployerPrivateKey);
 
-        console.log("========================================");
-        console.log("Deploying Investment DAO Protocol");
-        console.log("========================================");
+    (
+      address timeLock,
+      address governanceToken,
+      address treasury,
+      address daoGovernor,
+      address protocolCore,
+      address riskManager,
+      address guardianAdministrator,
+      address guardianBondEscrow,
+      address vaultRegistry,
+      address strategyRouter,
+      address vaultImplementation,
+      address genesisBonding,
+      address vaultFactory,
+      address aaveV3Adapter
+    ) = deployContracts(deployer, networkConfig);
 
-        DeployTimeLock deployTimeLock = new DeployTimeLock();
-        deployTimeLock.run(deployer);
-        address timeLock = deployTimeLock.timeLockAddress();
+    generateDeploymentsJson(
+      networkConfig,
+      timeLock,
+      governanceToken,
+      treasury,
+      daoGovernor,
+      protocolCore,
+      riskManager,
+      guardianAdministrator,
+      guardianBondEscrow,
+      vaultRegistry,
+      strategyRouter,
+      vaultImplementation,
+      genesisBonding,
+      vaultFactory,
+      aaveV3Adapter
+    );
 
-        DeployGovernanceToken deployGovernanceToken = new DeployGovernanceToken();
-        deployGovernanceToken.run(deployer);
-        address governanceToken = deployGovernanceToken.governanceTokenAddress();
+    createContractsSdkStructure();
+  }
 
-        DeployTreasury deployTreasury = new DeployTreasury();
-        deployTreasury.run(timeLock, deployer);
-        address treasury = deployTreasury.treasuryAddress();
+  function deployContracts(address deployer, HelperConfig.NetworkConfig memory networkConfig)
+    internal
+    returns (
+      address,
+      address,
+      address,
+      address,
+      address,
+      address,
+      address,
+      address,
+      address,
+      address,
+      address,
+      address,
+      address,
+      address
+    )
+  {
+    console.log("========================================");
+    console.log("Deploying Investment DAO Protocol");
+    console.log("========================================");
 
-        DeployDaoGovernor deployDaoGovernor = new DeployDaoGovernor();
-        deployDaoGovernor.run(governanceToken, timeLock, deployer);
-        address daoGovernor = deployDaoGovernor.daoGovernorAddress();
+    DeployTimeLock deployTimeLock = new DeployTimeLock();
+    deployTimeLock.run(deployer);
+    address timeLock = deployTimeLock.timeLockAddress();
 
-        DeployProtocolCore deployProtocolCore = new DeployProtocolCore();
-        deployProtocolCore.run(timeLock, deployer, networkConfig.allowedGenesisTokens);
-        address protocolCore = deployProtocolCore.protocolCoreAddress();
+    DeployGovernanceToken deployGovernanceToken = new DeployGovernanceToken();
+    deployGovernanceToken.run(deployer);
+    address governanceToken = deployGovernanceToken.governanceTokenAddress();
 
-        DeployRiskManager deployRiskManager = new DeployRiskManager();
-        deployRiskManager.run(timeLock, deployer);
-        address riskManager = deployRiskManager.riskManagerAddress();
+    DeployTreasury deployTreasury = new DeployTreasury();
+    deployTreasury.run(timeLock, deployer);
+    address treasury = deployTreasury.treasuryAddress();
 
-        DeployGuardianAdministrator deployGuardianAdministrator = new DeployGuardianAdministrator();
-        deployGuardianAdministrator.run(daoGovernor, timeLock, deployer);
-        address guardianAdministrator = deployGuardianAdministrator.guardianAdministratorAddress();
+    DeployDaoGovernor deployDaoGovernor = new DeployDaoGovernor();
+    deployDaoGovernor.run(governanceToken, timeLock, deployer);
+    address daoGovernor = deployDaoGovernor.daoGovernorAddress();
 
-        DeployGuardianBondEscrow deployGuardianBondEscrow = new DeployGuardianBondEscrow();
-        deployGuardianBondEscrow.run(treasury, guardianAdministrator, timeLock, networkConfig.allowedGenesisTokens[0], deployer);
-        address guardianBondEscrow = deployGuardianBondEscrow.guardianBondEscrowAddress();
+    DeployProtocolCore deployProtocolCore = new DeployProtocolCore();
+    deployProtocolCore.run(timeLock, deployer, networkConfig.allowedGenesisTokens);
+    address protocolCore = deployProtocolCore.protocolCoreAddress();
 
-        DeployVaultRegistry deployVaultRegistry = new DeployVaultRegistry();
-        deployVaultRegistry.run(timeLock, deployer);
-        address vaultRegistry = deployVaultRegistry.vaultRegistryAddress();
+    DeployRiskManager deployRiskManager = new DeployRiskManager();
+    deployRiskManager.run(timeLock, deployer);
+    address riskManager = deployRiskManager.riskManagerAddress();
 
-        DeployStrategyRouter deployStrategyRouter = new DeployStrategyRouter();
-        deployStrategyRouter.run(timeLock, riskManager, vaultRegistry, deployer);
-        address strategyRouter = deployStrategyRouter.strategyRouterAddress();
+    DeployGuardianAdministrator deployGuardianAdministrator = new DeployGuardianAdministrator();
+    deployGuardianAdministrator.run(daoGovernor, timeLock, deployer);
+    address guardianAdministrator = deployGuardianAdministrator.guardianAdministratorAddress();
 
-        DeployVaultImplementation deployVaultImplementation = new DeployVaultImplementation();
-        deployVaultImplementation.run(deployer);
-        address vaultImplementation = deployVaultImplementation.vaultImplementationAddress();
+    DeployGuardianBondEscrow deployGuardianBondEscrow = new DeployGuardianBondEscrow();
+    deployGuardianBondEscrow.run(
+      treasury,
+      guardianAdministrator,
+      timeLock,
+      networkConfig.allowedGenesisTokens[0],
+      deployer
+    );
+    address guardianBondEscrow = deployGuardianBondEscrow.guardianBondEscrowAddress();
 
-        DeployGenesisBonding deployGenesisBonding = new DeployGenesisBonding();
-        deployGenesisBonding.run(governanceToken, treasury, deployer, networkConfig.allowedGenesisTokens);
-        address genesisBonding = deployGenesisBonding.genesisBondingAddress();
+    DeployVaultRegistry deployVaultRegistry = new DeployVaultRegistry();
+    deployVaultRegistry.run(timeLock, deployer);
+    address vaultRegistry = deployVaultRegistry.vaultRegistryAddress();
 
-        DeployVaultFactory deployVaultFactory = new DeployVaultFactory();
-        deployVaultFactory.run(timeLock, vaultImplementation, guardianAdministrator, vaultRegistry, strategyRouter, protocolCore, deployer);
-        address vaultFactory = deployVaultFactory.vaultFactoryAddress();
+    DeployStrategyRouter deployStrategyRouter = new DeployStrategyRouter();
+    deployStrategyRouter.run(timeLock, riskManager, vaultRegistry, deployer);
+    address strategyRouter = deployStrategyRouter.strategyRouterAddress();
 
-        DeployAaveV3Adapter deployAaveV3Adapter = new DeployAaveV3Adapter();
-        deployAaveV3Adapter.run(strategyRouter, networkConfig.aavePool, deployer);
-        address aaveV3Adapter = deployAaveV3Adapter.aaveV3AdapterAddress();
+    DeployVaultImplementation deployVaultImplementation = new DeployVaultImplementation();
+    deployVaultImplementation.run(deployer);
+    address vaultImplementation = deployVaultImplementation.vaultImplementationAddress();
 
-        console.log("========================================");
-        console.log("Deployment Summary:");
-        console.log("========================================");
-        console.log("TimeLock:", timeLock);
-        console.log("GovernanceToken:", governanceToken);
-        console.log("Treasury:", treasury);
-        console.log("DaoGovernor:", daoGovernor);
-        console.log("ProtocolCore:", protocolCore);
-        console.log("RiskManager:", riskManager);
-        console.log("GuardianAdministrator:", guardianAdministrator);
-        console.log("GuardianBondEscrow:", guardianBondEscrow);
-        console.log("VaultRegistry:", vaultRegistry);
-        console.log("StrategyRouter:", strategyRouter);
-        console.log("VaultImplementation:", vaultImplementation);
-        console.log("GenesisBonding:", genesisBonding);
-        console.log("VaultFactory:", vaultFactory);
-        console.log("AaveV3Adapter:", aaveV3Adapter);
-        console.log("========================================");
+    DeployGenesisBonding deployGenesisBonding = new DeployGenesisBonding();
+    deployGenesisBonding.run(
+      governanceToken,
+      treasury,
+      deployer,
+      networkConfig.allowedGenesisTokens
+    );
+    address genesisBonding = deployGenesisBonding.genesisBondingAddress();
 
-        //Generate network deployments summarize
-        string memory path = string.concat("deployments/", networkConfig.networkName, ".json");
+    DeployVaultFactory deployVaultFactory = new DeployVaultFactory();
+    deployVaultFactory.run(
+      timeLock,
+      vaultImplementation,
+      guardianAdministrator,
+      vaultRegistry,
+      strategyRouter,
+      protocolCore,
+      deployer
+    );
+    address vaultFactory = deployVaultFactory.vaultFactoryAddress();
 
-        string memory json = "deployment";
-        vm.serializeUint(json, "chainId", block.chainid);
-        vm.serializeAddress(json, "timeLock", timeLock);
-        vm.serializeAddress(json, "governanceToken", governanceToken);
-        vm.serializeAddress(json, "treasury", treasury);
-        vm.serializeAddress(json, "daoGovernor", daoGovernor);
-        vm.serializeAddress(json, "protocolCore", protocolCore);
-        vm.serializeAddress(json, "riskManager", riskManager);
-        vm.serializeAddress(json, "guardianAdministrator", guardianAdministrator);
-        vm.serializeAddress(json, "guardianBondEscrow", guardianBondEscrow);
-        vm.serializeAddress(json, "vaultRegistry", vaultRegistry);
-        vm.serializeAddress(json, "strategyRouter", strategyRouter);
-        vm.serializeAddress(json, "vaultImplementation", vaultImplementation);
-        vm.serializeAddress(json, "genesisBonding", genesisBonding);
-        vm.serializeAddress(json, "vaultFactory", vaultFactory);
-        string memory finalJson = vm.serializeAddress(json, "aaveV3Adapter", aaveV3Adapter);
+    DeployAaveV3Adapter deployAaveV3Adapter = new DeployAaveV3Adapter();
+    deployAaveV3Adapter.run(strategyRouter, networkConfig.aavePool, deployer);
+    address aaveV3Adapter = deployAaveV3Adapter.aaveV3AdapterAddress();
 
-        vm.writeJson(finalJson, path);
+    console.log("========================================");
+    console.log("Deployment Summary:");
+    console.log("========================================");
+    console.log("TimeLock:", timeLock);
+    console.log("GovernanceToken:", governanceToken);
+    console.log("Treasury:", treasury);
+    console.log("DaoGovernor:", daoGovernor);
+    console.log("ProtocolCore:", protocolCore);
+    console.log("RiskManager:", riskManager);
+    console.log("GuardianAdministrator:", guardianAdministrator);
+    console.log("GuardianBondEscrow:", guardianBondEscrow);
+    console.log("VaultRegistry:", vaultRegistry);
+    console.log("StrategyRouter:", strategyRouter);
+    console.log("VaultImplementation:", vaultImplementation);
+    console.log("GenesisBonding:", genesisBonding);
+    console.log("VaultFactory:", vaultFactory);
+    console.log("AaveV3Adapter:", aaveV3Adapter);
+    console.log("========================================");
 
-        console.log("Deployment file written to:", path);
+    return (
+      timeLock,
+      governanceToken,
+      treasury,
+      daoGovernor,
+      protocolCore,
+      riskManager,
+      guardianAdministrator,
+      guardianBondEscrow,
+      vaultRegistry,
+      strategyRouter,
+      vaultImplementation,
+      genesisBonding,
+      vaultFactory,
+      aaveV3Adapter
+    );
+  }
+
+  function generateDeploymentsJson(
+    HelperConfig.NetworkConfig memory networkConfig,
+    address timeLock,
+    address governanceToken,
+    address treasury,
+    address daoGovernor,
+    address protocolCore,
+    address riskManager,
+    address guardianAdministrator,
+    address guardianBondEscrow,
+    address vaultRegistry,
+    address strategyRouter,
+    address vaultImplementation,
+    address genesisBonding,
+    address vaultFactory,
+    address aaveV3Adapter
+  ) internal {
+    string memory deploymentsDir = "deployments";
+
+    if (!vm.exists(deploymentsDir)) {
+      vm.createDir(deploymentsDir, true);
     }
+
+    string memory path = string.concat("deployments/", networkConfig.networkName, ".json");
+
+    string memory json = "deployment";
+    vm.serializeUint(json, "chainId", block.chainid);
+    vm.serializeAddress(json, "timeLock", timeLock);
+    vm.serializeAddress(json, "governanceToken", governanceToken);
+    vm.serializeAddress(json, "treasury", treasury);
+    vm.serializeAddress(json, "daoGovernor", daoGovernor);
+    vm.serializeAddress(json, "protocolCore", protocolCore);
+    vm.serializeAddress(json, "riskManager", riskManager);
+    vm.serializeAddress(json, "guardianAdministrator", guardianAdministrator);
+    vm.serializeAddress(json, "guardianBondEscrow", guardianBondEscrow);
+    vm.serializeAddress(json, "vaultRegistry", vaultRegistry);
+    vm.serializeAddress(json, "strategyRouter", strategyRouter);
+    vm.serializeAddress(json, "vaultImplementation", vaultImplementation);
+    vm.serializeAddress(json, "genesisBonding", genesisBonding);
+    vm.serializeAddress(json, "vaultFactory", vaultFactory);
+    string memory finalJson = vm.serializeAddress(json, "aaveV3Adapter", aaveV3Adapter);
+
+    vm.writeJson(finalJson, path);
+
+    console.log("Deployment file written to:", path);
+  }
+
+  function createContractsSdkStructure() internal {
+    string memory sdkRoot = "contracts-sdk/src";
+
+    if (!vm.isDir(sdkRoot)) {
+      vm.createDir(sdkRoot, true);
+    }
+
+    if (!vm.isDir(string.concat(sdkRoot, "/abi"))) {
+      vm.createDir(string.concat(sdkRoot, "/abi"), true);
+    }
+
+    if (!vm.isDir(string.concat(sdkRoot, "/addresses"))) {
+      vm.createDir(string.concat(sdkRoot, "/addresses"), true);
+    }
+
+    if (!vm.isDir(string.concat(sdkRoot, "/helpers"))) {
+      vm.createDir(string.concat(sdkRoot, "/helpers"), true);
+    }
+  }
 }

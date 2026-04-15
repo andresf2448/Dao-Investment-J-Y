@@ -33,3 +33,7 @@ coverage:
 	forge coverage --report lcov
 	genhtml lcov.info --output-directory coverage
 	xdg-open coverage/index.html
+
+.PHONY: deploy
+
+deployLocal:; forge script script/deploy/DeployInvestmentDao.s.sol:DeployInvestmentDao --rpc-url http://127.0.0.1:8545 --broadcast -vvvvv

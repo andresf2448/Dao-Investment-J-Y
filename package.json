@@ -1,0 +1,12 @@
+{
+  "name": "dao-investment-j-y",
+  "private": true,
+  "scripts": {
+    "generate:contracts-sdk": "tsx script/generate-contracts-sdk.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

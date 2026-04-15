@@ -12,3 +12,9 @@ docs/
 
 # Dotenv file
 .env
+
+# Deployment files
+deployments/
+contracts-sdk/
+
+node_modules/
