@@ -98,7 +98,7 @@ contract ProtocolCore is
     }
   }
 
-  function setSupportedGGenesisTokens(address[] memory allowedGenesisTokens) public onlyRole(MANAGER_ROLE) {
+  function setSupportedGenesisTokens(address[] memory allowedGenesisTokens) public onlyRole(MANAGER_ROLE) {
     _setSupportedGenesisTokens(allowedGenesisTokens);
   }
 
