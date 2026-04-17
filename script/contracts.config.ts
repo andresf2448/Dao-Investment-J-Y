@@ -35,4 +35,9 @@ export const EXPORTED_CONTRACTS: ExportedContract[] = [
     contractName: "StrategyRouter",
     artifactPath: "out/StrategyRouter.sol/StrategyRouter.json",
   },
+  {
+    key: "riskManager",
+    contractName: "RiskManager",
+    artifactPath: "out/RiskManager.sol/RiskManager.json",
+  },
 ]
