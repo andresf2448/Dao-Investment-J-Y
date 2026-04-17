@@ -16,7 +16,8 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "viem": "~2.47.17",
-    "wagmi": "^3.6.1"
+    "wagmi": "^3.6.1",
+    "@dao/contracts-sdk": "file:../contracts-sdk"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

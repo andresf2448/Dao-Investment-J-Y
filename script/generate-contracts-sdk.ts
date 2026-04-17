@@ -6,7 +6,44 @@ import { generateAddresses } from "./generate-addresses"
 import { generateHelpers } from "./generate-helpers"
 
 const ROOT = process.cwd()
-const SDK_SRC_DIR = path.join(ROOT, "contracts-sdk", "src")
+const SDK_DIR = path.join(ROOT, "contracts-sdk")
+const SDK_SRC_DIR = path.join(SDK_DIR, "src")
+
+function ensureDir(dirPath: string) {
+  fs.mkdirSync(dirPath, { recursive: true })
+}
+
+function writeFile(filePath: string, content: string) {
+  fs.writeFileSync(filePath, content, "utf8")
+}
+
+function writeJsonIfNotExists(filePath: string, data: unknown) {
+  if (fs.existsSync(filePath)) return
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8")
+}
+
+function ensureSdkStructure() {
+  ensureDir(SDK_DIR)
+  ensureDir(SDK_SRC_DIR)
+  ensureDir(path.join(SDK_SRC_DIR, "abi"))
+  ensureDir(path.join(SDK_SRC_DIR, "helpers"))
+}
+
+function generatePackageJson() {
+  const packageJson = {
+    name: "@dao/contracts-sdk",
+    version: "1.0.0",
+    private: true,
+    type: "module",
+    main: "./src/index.ts",
+    types: "./src/index.ts",
+    exports: {
+      ".": "./src/index.ts"
+    }
+  }
+
+  writeJsonIfNotExists(path.join(SDK_DIR, "package.json"), packageJson)
+}
 
 function generateIndexFile() {
   const abiExports = EXPORTED_CONTRACTS.map(
@@ -24,12 +61,13 @@ function generateIndexFile() {
     "",
   ].join("\n")
 
-  fs.writeFileSync(path.join(SDK_SRC_DIR, "index.ts"), content)
+  writeFile(path.join(SDK_SRC_DIR, "index.ts"), content)
 }
 
 function main() {
-  fs.mkdirSync(SDK_SRC_DIR, { recursive: true })
+  ensureSdkStructure()
 
+  generatePackageJson()
   generateAbis()
   generateAddresses()
   generateHelpers()
