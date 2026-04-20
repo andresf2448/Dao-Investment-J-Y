@@ -17,6 +17,7 @@ import {DeployVaultImplementation} from "./DeployVaultImplementation.s.sol";
 import {DeployGenesisBonding} from "./DeployGenesisBonding.s.sol";
 import {DeployVaultFactory} from "./DeployVaultFactory.s.sol";
 import {DeployAaveV3Adapter} from "./DeployAaveV3Adapter.s.sol";
+import {DeployMocks} from "./DeployMocks.s.sol";
 import {TimeLock} from "../../contracts/governance/TimeLock.sol";
 import {GovernanceToken} from "../../contracts/governance/GovernanceToken.sol";
 
@@ -25,6 +26,16 @@ contract DeployInvestmentDao is Script {
     HelperConfig config = new HelperConfig();
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
     address deployer = vm.addr(networkConfig.deployerPrivateKey);
+
+    // Deploy mocks for anvil network
+    if (block.chainid == 31337) { // Anvil chain ID
+      DeployMocks deployMocks = new DeployMocks();
+      (address mockERC20, address mockAavePool) = deployMocks.run();
+
+      // Update network config with deployed mock addresses
+      networkConfig.allowedGenesisTokens[0] = mockERC20;
+      networkConfig.aavePool = mockAavePool;
+    }
 
     (
       TimeLock timeLock,
@@ -41,7 +52,7 @@ contract DeployInvestmentDao is Script {
       address genesisBonding,
       address vaultFactory,
       address aaveV3Adapter
-    ) = deployContracts(deployer, networkConfig);
+    ) = deployContracts(config, deployer, networkConfig);
 
     generateDeploymentsJson(
       networkConfig,
@@ -64,7 +75,7 @@ contract DeployInvestmentDao is Script {
     createContractsSdkStructure();
   }
 
-  function deployContracts(address deployer, HelperConfig.NetworkConfig memory networkConfig)
+  function deployContracts(HelperConfig config, address deployer, HelperConfig.NetworkConfig memory networkConfig)
     internal
     returns (
       TimeLock,
@@ -88,16 +99,17 @@ contract DeployInvestmentDao is Script {
     console.log("========================================");
 
     DeployTimeLock deployTimeLock = new DeployTimeLock();
-    TimeLock timeLock = deployTimeLock.run(deployer);
+    TimeLock timeLock = deployTimeLock.run(config, deployer);
 
     DeployGovernanceToken deployGovernanceToken = new DeployGovernanceToken();
-    GovernanceToken governanceToken = deployGovernanceToken.run(deployer);
+    GovernanceToken governanceToken = deployGovernanceToken.run(config, deployer);
 
     DeployTreasury deployTreasury = new DeployTreasury();
-    address treasury = address(deployTreasury.run(address(timeLock), deployer));
+    address treasury = address(deployTreasury.run(config, address(timeLock), deployer));
 
     DeployGenesisBonding deployGenesisBonding = new DeployGenesisBonding();
     address genesisBonding = address(deployGenesisBonding.run(
+      config,
       address(governanceToken),
       treasury,
       deployer,
@@ -111,19 +123,20 @@ contract DeployInvestmentDao is Script {
     vm.stopPrank();
 
     DeployDaoGovernor deployDaoGovernor = new DeployDaoGovernor();
-    address daoGovernor = address(deployDaoGovernor.run(address(governanceToken), address(timeLock), deployer));
+    address daoGovernor = address(deployDaoGovernor.run(config, address(governanceToken), address(timeLock), deployer));
 
     DeployProtocolCore deployProtocolCore = new DeployProtocolCore();
-    address protocolCore = address(deployProtocolCore.run(address(timeLock), deployer, networkConfig.allowedGenesisTokens));
+    address protocolCore = address(deployProtocolCore.run(config, address(timeLock), deployer, networkConfig.allowedGenesisTokens));
 
     DeployRiskManager deployRiskManager = new DeployRiskManager();
-    address riskManager = address(deployRiskManager.run(address(timeLock), deployer));
+    address riskManager = address(deployRiskManager.run(config, address(timeLock), deployer));
 
     DeployGuardianAdministrator deployGuardianAdministrator = new DeployGuardianAdministrator();
-    address guardianAdministrator = address(deployGuardianAdministrator.run(daoGovernor, address(timeLock), deployer));
+    address guardianAdministrator = address(deployGuardianAdministrator.run(config, daoGovernor, address(timeLock), deployer));
 
     DeployGuardianBondEscrow deployGuardianBondEscrow = new DeployGuardianBondEscrow();
     address guardianBondEscrow = address(deployGuardianBondEscrow.run(
+      config,
       treasury,
       guardianAdministrator,
       address(timeLock),
@@ -132,16 +145,17 @@ contract DeployInvestmentDao is Script {
     ));
 
     DeployVaultRegistry deployVaultRegistry = new DeployVaultRegistry();
-    address vaultRegistry = address(deployVaultRegistry.run(address(timeLock), deployer));
+    address vaultRegistry = address(deployVaultRegistry.run(config, address(timeLock), deployer));
 
     DeployStrategyRouter deployStrategyRouter = new DeployStrategyRouter();
-    address strategyRouter = address(deployStrategyRouter.run(address(timeLock), riskManager, vaultRegistry, deployer));
+    address strategyRouter = address(deployStrategyRouter.run(config, address(timeLock), riskManager, vaultRegistry, deployer));
 
     DeployVaultImplementation deployVaultImplementation = new DeployVaultImplementation();
-    address vaultImplementation = address(deployVaultImplementation.run(deployer));
+    address vaultImplementation = address(deployVaultImplementation.run(config, deployer));
 
     DeployVaultFactory deployVaultFactory = new DeployVaultFactory();
     address vaultFactory = address(deployVaultFactory.run(
+      config,
       address(timeLock),
       vaultImplementation,
       guardianAdministrator,
@@ -152,25 +166,30 @@ contract DeployInvestmentDao is Script {
     ));
 
     DeployAaveV3Adapter deployAaveV3Adapter = new DeployAaveV3Adapter();
-    address aaveV3Adapter = address(deployAaveV3Adapter.run(strategyRouter, networkConfig.aavePool, deployer));
+    address aaveV3Adapter = address(deployAaveV3Adapter.run(config, strategyRouter, networkConfig.aavePool, deployer));
 
     console.log("========================================");
     console.log("Deployment Summary:");
     console.log("========================================");
-    console.log("TimeLock:", address(timeLock));
-    console.log("GovernanceToken:", address(governanceToken));
-    console.log("Treasury:", treasury);
-    console.log("DaoGovernor:", daoGovernor);
-    console.log("ProtocolCore:", protocolCore);
-    console.log("RiskManager:", riskManager);
-    console.log("GuardianAdministrator:", guardianAdministrator);
-    console.log("GuardianBondEscrow:", guardianBondEscrow);
-    console.log("VaultRegistry:", vaultRegistry);
-    console.log("StrategyRouter:", strategyRouter);
-    console.log("VaultImplementation:", vaultImplementation);
-    console.log("GenesisBonding:", genesisBonding);
-    console.log("VaultFactory:", vaultFactory);
-    console.log("AaveV3Adapter:", aaveV3Adapter);
+    console.log("TimeLock: ", address(timeLock));
+    console.log("GovernanceToken: ", address(governanceToken));
+    console.log("Treasury: ", treasury);
+    console.log("DaoGovernor: ", daoGovernor);
+    console.log("ProtocolCore: ", protocolCore);
+    console.log("RiskManager: ", riskManager);
+    console.log("GuardianAdministrator: ", guardianAdministrator);
+    console.log("GuardianBondEscrow: ", guardianBondEscrow);
+    console.log("VaultRegistry: ", vaultRegistry);
+    console.log("StrategyRouter: ", strategyRouter);
+    console.log("VaultImplementation: ", vaultImplementation);
+    console.log("GenesisBonding: ", genesisBonding);
+    console.log("VaultFactory: ", vaultFactory);
+    console.log("AaveV3Adapter: ", aaveV3Adapter);
+    console.log("================MOCK====================");
+    if (block.chainid == 31337) {
+      console.log("MockERC20: ", networkConfig.allowedGenesisTokens[0]);
+      console.log("MockAavePool: ", networkConfig.aavePool);
+    }
     console.log("========================================");
 
     return (
@@ -218,6 +237,8 @@ contract DeployInvestmentDao is Script {
 
     string memory json = "deployment";
     vm.serializeUint(json, "chainId", block.chainid);
+    vm.serializeAddress(json, "allowedGenesisToken", networkConfig.allowedGenesisTokens[0]);
+    vm.serializeAddress(json, "aavePool", networkConfig.aavePool);
     vm.serializeAddress(json, "timeLock", address(timeLock));
     vm.serializeAddress(json, "governanceToken", address(governanceToken));
     vm.serializeAddress(json, "treasury", treasury);

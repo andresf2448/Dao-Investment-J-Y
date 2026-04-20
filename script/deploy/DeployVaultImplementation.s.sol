@@ -6,8 +6,7 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 import {VaultImplementation} from "../../contracts/vaults/implementations/VaultImplementation.sol";
 
 contract DeployVaultImplementation is Script {
-  function run(address _deployer) external returns (VaultImplementation) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _deployer) external returns (VaultImplementation) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

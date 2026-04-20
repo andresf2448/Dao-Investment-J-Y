@@ -6,8 +6,7 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 import {GovernanceToken} from "../../contracts/governance/GovernanceToken.sol";
 
 contract DeployGovernanceToken is Script {
-  function run(address _deployer) external returns (GovernanceToken) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _deployer) external returns (GovernanceToken) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

@@ -7,8 +7,7 @@ import {ProtocolCore} from "../../contracts/core/ProtocolCore.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployProtocolCore is Script {
-  function run(address _timeLock, address _deployer, address[] memory _allowedTokens) external returns (ProtocolCore) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _timeLock, address _deployer, address[] memory _allowedTokens) external returns (ProtocolCore) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

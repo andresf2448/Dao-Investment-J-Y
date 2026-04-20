@@ -6,8 +6,7 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 import {TimeLock} from "../../contracts/governance/TimeLock.sol";
 
 contract DeployTimeLock is Script {
-  function run(address _deployer) external returns (TimeLock) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _deployer) external returns (TimeLock) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

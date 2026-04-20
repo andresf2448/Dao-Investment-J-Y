@@ -8,8 +8,7 @@ import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import {TimeLock} from "../../contracts/governance/TimeLock.sol";
 
 contract DeployDaoGovernor is Script {
-  function run(address _governanceToken, address _timeLock, address _deployer) external returns (DaoGovernor) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _governanceToken, address _timeLock, address _deployer) external returns (DaoGovernor) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

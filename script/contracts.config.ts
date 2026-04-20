@@ -40,4 +40,9 @@ export const EXPORTED_CONTRACTS: ExportedContract[] = [
     contractName: "RiskManager",
     artifactPath: "out/RiskManager.sol/RiskManager.json",
   },
+  {
+    key: "daoGovernor",
+    contractName: "DaoGovernor",
+    artifactPath: "out/DaoGovernor.sol/DaoGovernor.json",
+  }
 ]

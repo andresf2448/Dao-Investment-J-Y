@@ -6,6 +6,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {CommonErrors} from "../libraries/errors/CommonErrors.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 
 contract ProtocolCore is
   Initializable,
@@ -20,6 +21,7 @@ contract ProtocolCore is
   EnumerableSet.AddressSet private _supportedGenesisTokens;
   bool public isVaultCreationPaused;
   bool public isDepositsPaused;
+  address payable private adminTimelock;
 
   event SupportedAssetSet(address indexed asset, bool allowed);
   event VaultCreationPauseSet(bool paused);
@@ -30,19 +32,20 @@ contract ProtocolCore is
   }
 
   function initialize(
-    address adminTimelock,
+    address payable adminTimelock_,
     address emergencyOperator,
     address[] memory allowedGenesisTokens
   ) external initializer {
     if(
-      adminTimelock == address(0) ||
+      adminTimelock_ == address(0) ||
       emergencyOperator == address(0)
     )
       revert CommonErrors.ZeroAddress();
     __AccessControl_init();
 
-    _grantRole(DEFAULT_ADMIN_ROLE, adminTimelock);
-    _grantRole(MANAGER_ROLE, adminTimelock);
+    adminTimelock = adminTimelock_;
+    _grantRole(DEFAULT_ADMIN_ROLE, adminTimelock_);
+    _grantRole(MANAGER_ROLE, adminTimelock_);
     _grantRole(EMERGENCY_ROLE, emergencyOperator);
 
     _setSupportedGenesisTokens(allowedGenesisTokens);
@@ -87,6 +90,10 @@ contract ProtocolCore is
 
   function getSupportedGenesisTokens() external view returns(address[] memory) {
     return _supportedGenesisTokens.values();
+  }
+
+  function getTimelockMinDelay() external view returns(uint256) {
+    return TimelockController(adminTimelock).getMinDelay();
   }
 
   function setSupportedGenesisTokens(address[] memory allowedGenesisTokens) public onlyRole(MANAGER_ROLE) {

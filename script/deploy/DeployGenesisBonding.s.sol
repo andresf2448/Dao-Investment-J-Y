@@ -7,8 +7,7 @@ import {GenesisBonding} from "../../contracts/bootstrap/GenesisBonding.sol";
 import {IGovernanceToken} from "../../contracts/interfaces/governance/IGovernanceToken.sol";
 
 contract DeployGenesisBonding is Script {
-  function run(address _governanceToken, address _treasury, address _deployer, address[] memory _allowedTokens) external returns (GenesisBonding) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _governanceToken, address _treasury, address _deployer, address[] memory _allowedTokens) external returns (GenesisBonding) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

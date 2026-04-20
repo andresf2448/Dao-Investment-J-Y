@@ -7,8 +7,7 @@ import {RiskManager} from "../../contracts/execution/RiskManager.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployRiskManager is Script {
-  function run(address _timeLock, address _deployer) external returns (RiskManager) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _timeLock, address _deployer) external returns (RiskManager) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

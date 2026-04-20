@@ -2,7 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {Script, console} from "forge-std/Script.sol";
-import {MockUSDC} from "../../test/mocks/MockUSDC.sol";
+import {MockERC20} from "../../test/mocks/MockERC20.sol";
 import {MockAavePool} from "../../test/mocks/MockAavePool.sol";
 
 contract HelperConfig is Script {
@@ -37,18 +37,21 @@ contract HelperConfig is Script {
     });
   }
 
-  function getOrCreateAnvilConfig() public returns(NetworkConfig memory anvilNetworkConfig) {
+  function getOrCreateAnvilConfig() public view returns(NetworkConfig memory anvilNetworkConfig) {
     if(activeNetworkConfig.allowedGenesisTokens.length > 0) return activeNetworkConfig;
 
+    // Los mocks se desplegarán en cada script individual dentro de vm.startBroadcast
     address[] memory allowedGenesisTokens = new address[](1);
-    allowedGenesisTokens[0] = address(new MockUSDC());
+    allowedGenesisTokens[0] = address(0); // Placeholder, se reemplazará en cada deploy
 
     anvilNetworkConfig = NetworkConfig({
       allowedGenesisTokens: allowedGenesisTokens,
       deployerPrivateKey: DEFAULT_ANVIL_PRIVATE_KEY,
-      aavePool: address(new MockAavePool()),
+      aavePool: address(0), // Placeholder, se reemplazará en cada deploy
       networkName: "anvil"
     });
+
+    return anvilNetworkConfig;
   }
 
   function getActiveNetworkConfig() external view returns(NetworkConfig memory) {

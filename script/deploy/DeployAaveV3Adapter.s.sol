@@ -6,8 +6,7 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 import {AaveV3Adapter} from "../../contracts/adapters/aave/AaveV3Adapter.sol";
 
 contract DeployAaveV3Adapter is Script {
-  function run(address _strategyRouter, address _pool, address _deployer) external returns (AaveV3Adapter) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _strategyRouter, address _pool, address _deployer) external returns (AaveV3Adapter) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

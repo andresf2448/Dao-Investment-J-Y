@@ -6,8 +6,7 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 import {Treasury} from "../../contracts/core/Treasury.sol";
 
 contract DeployTreasury is Script {
-  function run(address _timeLock, address _deployer) external returns (Treasury) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _timeLock, address _deployer) external returns (Treasury) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

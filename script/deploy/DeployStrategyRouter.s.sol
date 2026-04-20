@@ -8,8 +8,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {IVaultRegistry} from "../../contracts/interfaces/vaults/IVaultRegistry.sol";
 
 contract DeployStrategyRouter is Script {
-  function run(address _timeLock, address _riskManager, address _vaultRegistry, address _deployer) external returns (StrategyRouter) {
-    HelperConfig config = new HelperConfig();
+  function run(HelperConfig config, address _timeLock, address _riskManager, address _vaultRegistry, address _deployer) external returns (StrategyRouter) {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

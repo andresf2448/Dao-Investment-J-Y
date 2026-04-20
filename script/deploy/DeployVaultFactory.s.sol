@@ -7,6 +7,7 @@ import {VaultFactory} from "../../contracts/vaults/factory/VaultFactory.sol";
 
 contract DeployVaultFactory is Script {
   function run(
+    HelperConfig config,
     address _timeLock,
     address _vaultImpl,
     address _guardianAdmin,
@@ -15,7 +16,6 @@ contract DeployVaultFactory is Script {
     address _protocolCore,
     address _deployer
   ) external returns (VaultFactory) {
-    HelperConfig config = new HelperConfig();
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;

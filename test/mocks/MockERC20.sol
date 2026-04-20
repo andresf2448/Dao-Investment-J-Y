@@ -3,8 +3,8 @@ pragma solidity ^0.8.33;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract MockUSDC is ERC20 {
-  constructor() ERC20("MockUSDC", "MUSDC") {}
+contract MockERC20 is ERC20 {
+  constructor() ERC20("MockERC20", "MERC20") {}
 
   function mint(address to, uint256 amount) external {
     _mint(to, amount);
