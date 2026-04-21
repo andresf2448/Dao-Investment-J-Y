@@ -11,6 +11,7 @@ contract DeployTimeLock is Script {
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;
     address deployer = _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
+    uint256 minDelay = block.chainid == 31337 ? 0 : 10;
 
     address[] memory proposers = new address[](1);
     address[] memory executors = new address[](1);
@@ -20,7 +21,7 @@ contract DeployTimeLock is Script {
 
     vm.startBroadcast(deployerPrivateKey);
       TimeLock timeLock = new TimeLock({
-        minDelay: 10,
+        minDelay: minDelay,
         proposers: proposers,
         executors: executors,
         admin: deployer

@@ -20,6 +20,8 @@ import {DeployAaveV3Adapter} from "./DeployAaveV3Adapter.s.sol";
 import {DeployMocks} from "./DeployMocks.s.sol";
 import {TimeLock} from "../../contracts/governance/TimeLock.sol";
 import {GovernanceToken} from "../../contracts/governance/GovernanceToken.sol";
+import {GuardianAdministrator} from "../../contracts/guardians/GuardianAdministrator.sol";
+import {VaultRegistry} from "../../contracts/vaults/registry/VaultRegistry.sol";
 
 contract DeployInvestmentDao is Script {
   function run() external {
@@ -34,6 +36,7 @@ contract DeployInvestmentDao is Script {
 
       // Update network config with deployed mock addresses
       networkConfig.allowedGenesisTokens[0] = mockERC20;
+      networkConfig.allowedVaultToken = mockERC20;
       networkConfig.aavePool = mockAavePool;
     }
 
@@ -117,16 +120,16 @@ contract DeployInvestmentDao is Script {
     ));
 
     vm.startBroadcast(networkConfig.deployerPrivateKey);
-    governanceToken.grantRole(governanceToken.MINTER_ROLE(), genesisBonding);
-    governanceToken.grantRole(governanceToken.DEFAULT_ADMIN_ROLE(), address(timeLock));
-    governanceToken.revokeRole(governanceToken.DEFAULT_ADMIN_ROLE(), deployer);
+      governanceToken.grantRole(governanceToken.MINTER_ROLE(), genesisBonding);
+      governanceToken.grantRole(governanceToken.DEFAULT_ADMIN_ROLE(), address(timeLock));
+      governanceToken.revokeRole(governanceToken.DEFAULT_ADMIN_ROLE(), deployer);
     vm.stopBroadcast();
 
     DeployDaoGovernor deployDaoGovernor = new DeployDaoGovernor();
     address daoGovernor = address(deployDaoGovernor.run(config, address(governanceToken), address(timeLock), deployer));
 
     DeployProtocolCore deployProtocolCore = new DeployProtocolCore();
-    address protocolCore = address(deployProtocolCore.run(config, address(timeLock), deployer, networkConfig.allowedGenesisTokens));
+    address protocolCore = address(deployProtocolCore.run(config, address(timeLock), deployer, networkConfig.allowedGenesisTokens, networkConfig.allowedVaultToken));
 
     DeployRiskManager deployRiskManager = new DeployRiskManager();
     address riskManager = address(deployRiskManager.run(config, address(timeLock), deployer));
@@ -148,7 +151,8 @@ contract DeployInvestmentDao is Script {
     address vaultRegistry = address(deployVaultRegistry.run(config, address(timeLock), deployer));
 
     DeployStrategyRouter deployStrategyRouter = new DeployStrategyRouter();
-    address strategyRouter = address(deployStrategyRouter.run(config, address(timeLock), riskManager, vaultRegistry, deployer));
+    address strategyRouter =
+      address(deployStrategyRouter.run(config, address(timeLock), riskManager, address(vaultRegistry), deployer));
 
     DeployVaultImplementation deployVaultImplementation = new DeployVaultImplementation();
     address vaultImplementation = address(deployVaultImplementation.run(config, deployer));
@@ -167,6 +171,20 @@ contract DeployInvestmentDao is Script {
 
     DeployAaveV3Adapter deployAaveV3Adapter = new DeployAaveV3Adapter();
     address aaveV3Adapter = address(deployAaveV3Adapter.run(config, strategyRouter, networkConfig.aavePool, deployer));
+
+    _configureProtocolDefaults(
+      networkConfig,
+      timeLock,
+      guardianAdministrator,
+      guardianBondEscrow,
+      vaultRegistry,
+      vaultFactory
+    );
+
+    vm.startBroadcast(networkConfig.deployerPrivateKey);
+      timeLock.grantRole(timeLock.DEFAULT_ADMIN_ROLE(), daoGovernor);
+      timeLock.renounceRole(timeLock.DEFAULT_ADMIN_ROLE(), deployer);
+    vm.stopBroadcast();
 
     console.log("========================================");
     console.log("Deployment Summary:");
@@ -207,6 +225,54 @@ contract DeployInvestmentDao is Script {
       genesisBonding,
       vaultFactory,
       aaveV3Adapter
+    );
+  }
+
+  function _scheduleAndMaybeExecute(
+    uint256 deployerPrivateKey,
+    TimeLock timeLock,
+    address target,
+    bytes memory data,
+    bytes32 salt
+  ) internal {
+    bytes32 predecessor = bytes32(0);
+    uint256 minDelay = timeLock.getMinDelay();
+
+    vm.startBroadcast(deployerPrivateKey);
+    timeLock.schedule(target, 0, data, predecessor, salt, minDelay);
+
+    if (minDelay == 0) {
+      timeLock.execute(target, 0, data, predecessor, salt);
+    }
+    vm.stopBroadcast();
+
+    if (minDelay > 0) {
+      console.log("Timelock operation scheduled and pending execution for target:", target);
+    }
+  }
+
+  function _configureProtocolDefaults(
+    HelperConfig.NetworkConfig memory networkConfig,
+    TimeLock timeLock,
+    address guardianAdministrator,
+    address guardianBondEscrow,
+    address vaultRegistry,
+    address vaultFactory
+  ) internal {
+    _scheduleAndMaybeExecute(
+      networkConfig.deployerPrivateKey,
+      timeLock,
+      guardianAdministrator,
+      abi.encodeWithSelector(GuardianAdministrator.setBondEscrow.selector, guardianBondEscrow),
+      keccak256("deploy-set-bond-escrow")
+    );
+
+    _scheduleAndMaybeExecute(
+      networkConfig.deployerPrivateKey,
+      timeLock,
+      vaultRegistry,
+      abi.encodeWithSelector(VaultRegistry.setFactory.selector, vaultFactory),
+      keccak256("deploy-set-vault-factory")
     );
   }
 

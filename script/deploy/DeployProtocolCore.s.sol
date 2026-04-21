@@ -7,12 +7,22 @@ import {ProtocolCore} from "../../contracts/core/ProtocolCore.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployProtocolCore is Script {
-  function run(HelperConfig config, address _timeLock, address _deployer, address[] memory _allowedTokens) external returns (ProtocolCore) {
+  function run(
+    HelperConfig config,
+    address _timeLock,
+    address _deployer,
+    address[] memory _allowedTokens,
+    address _allowedVaultToken
+  )
+    external
+    returns (ProtocolCore)
+  {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;
     address deployer = _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
     address[] memory allowedTokens = _allowedTokens.length > 0 ? _allowedTokens : networkConfig.allowedGenesisTokens;
+    address allowedVaultToken = _allowedVaultToken == address(0) ? networkConfig.allowedVaultToken : _allowedVaultToken;
 
     if (_timeLock == address(0)) {
       console.log("Error: TimeLock address required");
@@ -25,7 +35,7 @@ contract DeployProtocolCore is Script {
         address(implementation),
         abi.encodeCall(
           ProtocolCore.initialize,
-          (payable(_timeLock), deployer, allowedTokens)
+          (payable(_timeLock), deployer, allowedTokens, allowedVaultToken)
         )
       );
     vm.stopBroadcast();

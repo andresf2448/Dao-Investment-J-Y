@@ -34,11 +34,13 @@ contract ProtocolCore is
   function initialize(
     address payable adminTimelock_,
     address emergencyOperator,
-    address[] memory allowedGenesisTokens
+    address[] memory allowedGenesisTokens,
+    address allowedVaultToken
   ) external initializer {
     if(
       adminTimelock_ == address(0) ||
-      emergencyOperator == address(0)
+      emergencyOperator == address(0) ||
+      allowedVaultToken == address(0)
     )
       revert CommonErrors.ZeroAddress();
     __AccessControl_init();
@@ -49,15 +51,14 @@ contract ProtocolCore is
     _grantRole(EMERGENCY_ROLE, emergencyOperator);
 
     _setSupportedGenesisTokens(allowedGenesisTokens);
+    _setSupportedVaultToken(allowedVaultToken, true);
   }
 
   function setSupportedVaultAsset(
     address asset,
     bool allowed
   ) external onlyRole(MANAGER_ROLE) {
-    if (asset == address(0)) revert CommonErrors.ZeroAddress();
-    _supportedAssets[asset] = allowed;
-    emit SupportedAssetSet(asset, allowed);
+    _setSupportedVaultToken(asset, allowed);
   }
 
   function isVaultAssetSupported(address asset) external view returns(bool) {
@@ -107,6 +108,12 @@ contract ProtocolCore is
       if(allowedGenesisTokens[i] == address(0)) revert CommonErrors.ZeroAddress();
       _supportedGenesisTokens.add(allowedGenesisTokens[i]);
     }
+  }
+
+  function _setSupportedVaultToken(address allowedVaultToken, bool allowed) internal {
+    if (allowedVaultToken == address(0)) revert CommonErrors.ZeroAddress();
+    _supportedAssets[allowedVaultToken] = allowed;
+    emit SupportedAssetSet(allowedVaultToken, allowed);
   }
 
   function _authorizeUpgrade(

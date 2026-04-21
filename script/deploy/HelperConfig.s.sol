@@ -11,6 +11,7 @@ contract HelperConfig is Script {
     uint256 deployerPrivateKey;
     address aavePool;
     string networkName;
+    address allowedVaultToken;
   }
 
   uint256 public constant DEFAULT_ANVIL_PRIVATE_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
@@ -31,6 +32,7 @@ contract HelperConfig is Script {
 
     sepoliaNetworkConfig = NetworkConfig({
       allowedGenesisTokens: allowedGenesisTokens,
+      allowedVaultToken: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238,
       deployerPrivateKey: vm.envUint("SEPOLIA_PRIVATE_KEY"),
       aavePool: 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2,
       networkName: "sepolia"
@@ -46,6 +48,7 @@ contract HelperConfig is Script {
 
     anvilNetworkConfig = NetworkConfig({
       allowedGenesisTokens: allowedGenesisTokens,
+      allowedVaultToken: address(0), // Placeholder, se reemplazará en cada deploy
       deployerPrivateKey: DEFAULT_ANVIL_PRIVATE_KEY,
       aavePool: address(0), // Placeholder, se reemplazará en cada deploy
       networkName: "anvil"

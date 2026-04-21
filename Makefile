@@ -41,3 +41,12 @@ s_deployLocal:
 	forge build
 	forge script script/deploy/DeployInvestmentDao.s.sol:DeployInvestmentDao --rpc-url http://127.0.0.1:8545 --broadcast -vvvvv
 	pnpm run generate:contracts-sdk
+
+.PHONY: s_seedLocal
+
+s_seedLocal:
+	forge script script/local/SeedLocal.s.sol:SeedLocal --rpc-url http://127.0.0.1:8545 --broadcast --skip-simulation -vvvv
+
+.PHONY: s_bootstrapLocal
+
+s_bootstrapLocal: s_deployLocal s_seedLocal
