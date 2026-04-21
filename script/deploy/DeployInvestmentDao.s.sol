@@ -116,11 +116,11 @@ contract DeployInvestmentDao is Script {
       networkConfig.allowedGenesisTokens
     ));
 
-    vm.startPrank(deployer);
+    vm.startBroadcast(networkConfig.deployerPrivateKey);
     governanceToken.grantRole(governanceToken.MINTER_ROLE(), genesisBonding);
     governanceToken.grantRole(governanceToken.DEFAULT_ADMIN_ROLE(), address(timeLock));
     governanceToken.revokeRole(governanceToken.DEFAULT_ADMIN_ROLE(), deployer);
-    vm.stopPrank();
+    vm.stopBroadcast();
 
     DeployDaoGovernor deployDaoGovernor = new DeployDaoGovernor();
     address daoGovernor = address(deployDaoGovernor.run(config, address(governanceToken), address(timeLock), deployer));
