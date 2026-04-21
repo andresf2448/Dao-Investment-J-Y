@@ -44,5 +44,10 @@ export const EXPORTED_CONTRACTS: ExportedContract[] = [
     key: "daoGovernor",
     contractName: "DaoGovernor",
     artifactPath: "out/DaoGovernor.sol/DaoGovernor.json",
+  },
+  {
+    key: "guardianAdministrator",
+    contractName: "GuardianAdministrator",
+    artifactPath: "out/GuardianAdministrator.sol/GuardianAdministrator.json",
   }
 ]
