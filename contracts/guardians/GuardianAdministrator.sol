@@ -3,10 +3,12 @@ pragma solidity ^0.8.33;
 
 import {IGovernor} from "@openzeppelin/contracts/governance/IGovernor.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {IGuardianBondEscrow} from "../interfaces/guardians/IGuardianBondEscrow.sol";
 import {CommonErrors} from "../libraries/errors/CommonErrors.sol";
 
 contract GuardianAdministrator {
+  using EnumerableSet for EnumerableSet.AddressSet;
   using Strings for address;
   using Strings for uint256;
 
@@ -32,6 +34,7 @@ contract GuardianAdministrator {
   address public immutable timelock;
 
   mapping(address => GuardianDetail) private guardians;
+  EnumerableSet.AddressSet private activeGuardians;
 
   event GuardianApplied(address indexed guardian, uint256 indexed proposalId);
   event GuardianApproved(address indexed guardian);
@@ -133,6 +136,7 @@ contract GuardianAdministrator {
     }
 
     guardianDetail.status = Status.Active;
+    activeGuardians.add(guardian);
 
     emit GuardianApproved(guardian);
   }
@@ -180,6 +184,7 @@ contract GuardianAdministrator {
 
     guardian.status = Status.Resigned;
     guardian.balance = 0;
+    activeGuardians.remove(sender);
 
     if (refund > 0) {
       bondEscrow.releaseOnResign(sender, refund);
@@ -203,6 +208,7 @@ contract GuardianAdministrator {
 
     guardianDetail.status = Status.Banned;
     guardianDetail.balance = 0;
+    activeGuardians.remove(guardian);
 
     if (forfeit > 0) {
       bondEscrow.slashToTreasury(guardian, forfeit);
@@ -256,5 +262,9 @@ contract GuardianAdministrator {
     returns (bool)
   {
     return guardians[guardian].status == Status.Active;
+  }
+
+  function totalActiveGuardians() external view returns (uint256) {
+    return activeGuardians.length();
   }
 }
