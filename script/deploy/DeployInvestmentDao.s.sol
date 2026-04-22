@@ -130,7 +130,7 @@ contract DeployInvestmentDao is Script {
     address riskManager = address(deployRiskManager.run(config, address(timeLock), deployer));
 
     DeployGuardianAdministrator deployGuardianAdministrator = new DeployGuardianAdministrator();
-    address guardianAdministrator = address(deployGuardianAdministrator.run(config, daoGovernor, address(timeLock), deployer));
+    address guardianAdministrator = address(deployGuardianAdministrator.run(config, daoGovernor, address(timeLock), networkConfig.allowedGenesisTokens[0]));
 
     vm.startBroadcast(networkConfig.deployerPrivateKey);
       governanceToken.grantRole(governanceToken.MINTER_ROLE(), genesisBonding);
