@@ -18,6 +18,20 @@ contract SeedLocal is Script {
   uint256 constant INVESTOR2_GVT_BUY = 30e18;
   uint256 constant INVESTOR1_DEPOSIT = 10e18;
   uint256 constant INVESTOR2_DEPOSIT = 5e18;
+  bytes32 constant DEFAULT_ADMIN_ROLE = 0x00;
+  bytes32 constant PROPOSER_ROLE = keccak256("PROPOSER_ROLE");
+  bytes32 constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
+  bytes32 constant CANCELLER_ROLE = keccak256("CANCELLER_ROLE");
+  bytes32 constant MINTER_ROLE = keccak256("MINTER_ROLE");
+  bytes32 constant SWEEP_ROLE = keccak256("SWEEP_ROLE");
+  bytes32 constant SWEEP_NOT_ASSET_DAO_ROLE = keccak256("SWEEP_NOT_ASSET_DAO_ROLE");
+  bytes32 constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+  bytes32 constant EMERGENCY_ROLE = keccak256("EMERGENCY_ROLE");
+  bytes32 constant GUARDIAN_ADMINISTRATOR_ROLE = keccak256("GUARDIAN_ADMINISTRATOR_ROLE");
+  bytes32 constant FACTORY_ROLE = keccak256("FACTORY_ROLE");
+  bytes32 constant ADAPTER_MANAGER_ROLE = keccak256("ADAPTER_MANAGER_ROLE");
+  bytes32 constant GUARDIAN_ROLE = keccak256("GUARDIAN_ROLE");
+  bytes32 constant STRATEGY_EXECUTOR_ROLE = keccak256("STRATEGY_EXECUTOR_ROLE");
 
   struct Participant {
     address addr;
@@ -37,7 +51,15 @@ contract SeedLocal is Script {
     address guardianBondEscrow = abi.decode(vm.parseJson(json, ".guardianBondEscrow"), (address));
     address genesisBonding = abi.decode(vm.parseJson(json, ".genesisBonding"), (address));
     address vaultFactory = abi.decode(vm.parseJson(json, ".vaultFactory"), (address));
+    address governanceToken = abi.decode(vm.parseJson(json, ".governanceToken"), (address));
+    address treasury = abi.decode(vm.parseJson(json, ".treasury"), (address));
+    address protocolCore = abi.decode(vm.parseJson(json, ".protocolCore"), (address));
+    address riskManager = abi.decode(vm.parseJson(json, ".riskManager"), (address));
+    address vaultRegistry = abi.decode(vm.parseJson(json, ".vaultRegistry"), (address));
+    address strategyRouter = abi.decode(vm.parseJson(json, ".strategyRouter"), (address));
     address mockUsdc = address(GuardianBondEscrow(guardianBondEscrow).guardianApplicationToken());
+    uint256 adminWalletPrivateKey = vm.envUint("ADMIN_WALLET_ANVIL_PRIVATE_KEY");
+    address adminWallet = vm.addr(adminWalletPrivateKey);
 
     (address guardianAddr, uint256 guardianPk) = makeAddrAndKey("seed-guardian");
     (address investor1Addr, uint256 investor1Pk) = makeAddrAndKey("seed-investor-1");
@@ -51,9 +73,26 @@ contract SeedLocal is Script {
     console.log("Running Local Seed");
     console.log("========================================");
 
+    _fundAccount(networkConfig.deployerPrivateKey, adminWallet, GAS_BUFFER);
     _fundAccount(networkConfig.deployerPrivateKey, guardian.addr, GAS_BUFFER);
     _fundAccount(networkConfig.deployerPrivateKey, investor1.addr, GAS_BUFFER);
     _fundAccount(networkConfig.deployerPrivateKey, investor2.addr, GAS_BUFFER);
+
+    _grantAdminWalletFullAccess(
+      networkConfig.deployerPrivateKey,
+      adminWallet,
+      timeLock,
+      governanceToken,
+      treasury,
+      protocolCore,
+      riskManager,
+      guardianAdministrator,
+      guardianBondEscrow,
+      vaultRegistry,
+      strategyRouter,
+      genesisBonding,
+      vaultFactory
+    );
 
     _mintUsdc(networkConfig.deployerPrivateKey, mockUsdc, guardian.addr, GUARDIAN_BOND);
     _mintUsdc(networkConfig.deployerPrivateKey, mockUsdc, investor1.addr, INVESTOR1_GVT_BUY + INVESTOR1_DEPOSIT);
@@ -69,6 +108,7 @@ contract SeedLocal is Script {
     );
 
     address vault = _createVault(guardian.privateKey, vaultFactory, mockUsdc);
+    _grantVaultRolesToAdmin(networkConfig.deployerPrivateKey, timeLock, vault, adminWallet);
     _buyGovernanceForInvestor(investor1, mockUsdc, genesisBonding, INVESTOR1_GVT_BUY);
     _buyGovernanceForInvestor(investor2, mockUsdc, genesisBonding, INVESTOR2_GVT_BUY);
     _depositToVault(investor1, mockUsdc, vault, INVESTOR1_DEPOSIT);
@@ -77,6 +117,7 @@ contract SeedLocal is Script {
     console.log("========================================");
     console.log("Local Seed Complete");
     console.log("========================================");
+    console.log("Admin wallet:", adminWallet);
     console.log("Guardian:", guardian.addr);
     console.log("Investor1:", investor1.addr);
     console.log("Investor2:", investor2.addr);
@@ -134,6 +175,149 @@ contract SeedLocal is Script {
     vm.startBroadcast(guardianPrivateKey);
     (vault,) = VaultFactory(vaultFactory).createVault(mockUsdc, "Seed Vault", "sVAULT");
     vm.stopBroadcast();
+  }
+
+  function _grantAdminWalletFullAccess(
+    uint256 deployerPrivateKey,
+    address adminWallet,
+    address timeLock,
+    address governanceToken,
+    address treasury,
+    address protocolCore,
+    address riskManager,
+    address guardianAdministrator,
+    address guardianBondEscrow,
+    address vaultRegistry,
+    address strategyRouter,
+    address genesisBonding,
+    address vaultFactory
+  ) internal {
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, timeLock, DEFAULT_ADMIN_ROLE, adminWallet, "timelock-default-admin");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, timeLock, PROPOSER_ROLE, adminWallet, "timelock-proposer");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, timeLock, EXECUTOR_ROLE, adminWallet, "timelock-executor");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, timeLock, CANCELLER_ROLE, adminWallet, "timelock-canceller");
+
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, governanceToken, DEFAULT_ADMIN_ROLE, adminWallet, "governance-token-default-admin");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, governanceToken, MINTER_ROLE, adminWallet, "governance-token-minter");
+
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, treasury, DEFAULT_ADMIN_ROLE, adminWallet, "treasury-default-admin");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, treasury, SWEEP_NOT_ASSET_DAO_ROLE, adminWallet, "treasury-sweep-not-asset-dao");
+
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, protocolCore, DEFAULT_ADMIN_ROLE, adminWallet, "protocol-core-default-admin");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, protocolCore, MANAGER_ROLE, adminWallet, "protocol-core-manager");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, protocolCore, EMERGENCY_ROLE, adminWallet, "protocol-core-emergency");
+
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, riskManager, DEFAULT_ADMIN_ROLE, adminWallet, "risk-manager-default-admin");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, riskManager, MANAGER_ROLE, adminWallet, "risk-manager-manager");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, riskManager, EMERGENCY_ROLE, adminWallet, "risk-manager-emergency");
+
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, guardianBondEscrow, DEFAULT_ADMIN_ROLE, adminWallet, "guardian-bond-escrow-default-admin");
+    _grantRoleViaTimelock(
+      deployerPrivateKey,
+      timeLock,
+      guardianBondEscrow,
+      GUARDIAN_ADMINISTRATOR_ROLE,
+      adminWallet,
+      "guardian-bond-escrow-guardian-admin"
+    );
+
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, vaultRegistry, DEFAULT_ADMIN_ROLE, adminWallet, "vault-registry-default-admin");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, vaultRegistry, FACTORY_ROLE, adminWallet, "vault-registry-factory");
+
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, strategyRouter, DEFAULT_ADMIN_ROLE, adminWallet, "strategy-router-default-admin");
+    _grantRoleViaTimelock(
+      deployerPrivateKey,
+      timeLock,
+      strategyRouter,
+      ADAPTER_MANAGER_ROLE,
+      adminWallet,
+      "strategy-router-adapter-manager"
+    );
+
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, genesisBonding, DEFAULT_ADMIN_ROLE, adminWallet, "genesis-bonding-default-admin");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, genesisBonding, SWEEP_ROLE, adminWallet, "genesis-bonding-sweep");
+
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, vaultFactory, DEFAULT_ADMIN_ROLE, adminWallet, "vault-factory-default-admin");
+
+    // GuardianAdministrator uses timelock-gated functions instead of AccessControl,
+    // so granting timelock roles is enough for the admin wallet to operate it.
+    _checkAdminWalletCoverage(timeLock, guardianAdministrator, adminWallet);
+  }
+
+  function _grantVaultRolesToAdmin(
+    uint256 deployerPrivateKey,
+    address timeLock,
+    address vault,
+    address adminWallet
+  ) internal {
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, vault, DEFAULT_ADMIN_ROLE, adminWallet, "vault-default-admin");
+    _grantRoleViaTimelock(deployerPrivateKey, timeLock, vault, GUARDIAN_ROLE, adminWallet, "vault-guardian");
+    _grantRoleViaTimelock(
+      deployerPrivateKey,
+      timeLock,
+      vault,
+      STRATEGY_EXECUTOR_ROLE,
+      adminWallet,
+      "vault-strategy-executor"
+    );
+  }
+
+  function _grantRoleViaTimelock(
+    uint256 deployerPrivateKey,
+    address timeLock,
+    address target,
+    bytes32 role,
+    address account,
+    string memory saltLabel
+  ) internal {
+    if (_hasRole(target, role, account)) {
+      return;
+    }
+
+    bytes memory data = abi.encodeWithSignature("grantRole(bytes32,address)", role, account);
+    _scheduleAndExecuteTimelockCall(
+      deployerPrivateKey,
+      timeLock,
+      target,
+      data,
+      keccak256(abi.encodePacked("seed-local-role", saltLabel, target, role, account))
+    );
+  }
+
+  function _scheduleAndExecuteTimelockCall(
+    uint256 deployerPrivateKey,
+    address timeLock,
+    address target,
+    bytes memory data,
+    bytes32 salt
+  ) internal {
+    bytes32 predecessor = bytes32(0);
+    uint256 minDelay = TimeLock(payable(timeLock)).getMinDelay();
+
+    vm.startBroadcast(deployerPrivateKey);
+    TimeLock(payable(timeLock)).schedule(target, 0, data, predecessor, salt, minDelay);
+    TimeLock(payable(timeLock)).execute(target, 0, data, predecessor, salt);
+    vm.stopBroadcast();
+  }
+
+  function _hasRole(address target, bytes32 role, address account) internal view returns (bool hasRole_) {
+    (bool ok, bytes memory data) = target.staticcall(
+      abi.encodeWithSignature("hasRole(bytes32,address)", role, account)
+    );
+
+    if (!ok || data.length < 32) {
+      return false;
+    }
+
+    hasRole_ = abi.decode(data, (bool));
+  }
+
+  function _checkAdminWalletCoverage(address timeLock, address guardianAdministrator, address adminWallet) internal view {
+    require(_hasRole(timeLock, DEFAULT_ADMIN_ROLE, adminWallet), "Admin wallet missing timelock default admin role");
+    require(_hasRole(timeLock, PROPOSER_ROLE, adminWallet), "Admin wallet missing timelock proposer role");
+    require(_hasRole(timeLock, EXECUTOR_ROLE, adminWallet), "Admin wallet missing timelock executor role");
+    require(_hasRole(timeLock, CANCELLER_ROLE, adminWallet), "Admin wallet missing timelock canceller role");
+    require(GuardianAdministrator(guardianAdministrator).timelock() == timeLock, "GuardianAdministrator timelock mismatch");
   }
 
   function _buyGovernanceForInvestor(
