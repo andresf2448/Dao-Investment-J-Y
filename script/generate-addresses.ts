@@ -15,10 +15,15 @@ function getNetworkFiles() {
   return fs
     .readdirSync(DEPLOYMENTS_DIR)
     .filter((file) => file.endsWith(".json"))
+    .sort()
 }
 
 function toConstName(networkName: string) {
-  return `${networkName}Addresses`
+  const safeName = networkName
+    .replace(/[^a-zA-Z0-9]+(.)/g, (_, chr: string) => chr.toUpperCase())
+    .replace(/^[^a-zA-Z]+/, "")
+
+  return `${safeName.charAt(0).toLowerCase()}${safeName.slice(1)}Addresses`
 }
 
 export function generateAddresses() {
@@ -31,7 +36,7 @@ export function generateAddresses() {
   }
 
   const indexImports: string[] = []
-  const indexMappings: string[] = []
+  const chainMappings = new Map<string, string[]>()
 
   for (const fileName of networkFiles) {
     const networkName = fileName.replace(".json", "")
@@ -56,8 +61,23 @@ export function generateAddresses() {
     )
 
     indexImports.push(`import { ${constName} } from "./${networkName}"`)
-    indexMappings.push(`  ${chainId}: ${constName},`)
+
+    const current = chainMappings.get(String(chainId)) ?? []
+    current.push(constName)
+    chainMappings.set(String(chainId), current)
   }
+
+  const indexMappings = Array.from(chainMappings.entries()).map(
+    ([chainId, constNames]) => {
+      if (constNames.length === 1) {
+        return `  ${chainId}: ${constNames[0]},`
+      }
+
+      return `  ${chainId}: {\n${constNames
+        .map((constName) => `    ...${constName},`)
+        .join("\n")}\n  },`
+    },
+  )
 
   const indexContent =
     `${indexImports.join("\n")}\n\n` +
