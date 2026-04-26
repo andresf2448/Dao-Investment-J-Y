@@ -265,7 +265,7 @@ export function useVaultsModel(): VaultsModel {
     : "Unavailable";
   const vaultExplorerSubtitle = hasVaultRegistry
     ? totalVaultsValue > 0
-      ? `VaultRegistry.getAllVaults() returned ${totalVaultsValue} vaults.`
+      ? `${totalVaultsValue} registered vault${totalVaultsValue === 1 ? "" : "s"} found.`
       : "VaultRegistry is deployed, but no registered vaults were returned."
     : "VaultRegistry is not deployed on the connected network.";
   const guardianRoutingStatus =
