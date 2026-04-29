@@ -12,6 +12,7 @@ type ExecuteReadParams = {
   functionContract: ProtocolContractGetterName;
   args?: readonly unknown[];
   account?: Address;
+  address?: Address;
 };
 
 const useProtocolReadExecutor = () => {
@@ -22,6 +23,7 @@ const useProtocolReadExecutor = () => {
     functionContract,
     args,
     account,
+    address,
   }: ExecuteReadParams) => {
     try {
       if (!chainId) {
@@ -38,7 +40,7 @@ const useProtocolReadExecutor = () => {
 
       return await publicClient.readContract({
         abi: resolvedContract.abi,
-        address: resolvedContract.address,
+        address: address ?? resolvedContract.address,
         functionName,
         args,
         account,

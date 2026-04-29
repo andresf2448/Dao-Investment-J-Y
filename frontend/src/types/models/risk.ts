@@ -65,4 +65,5 @@ export interface RiskModel {
   actions: RiskActions;
   summary: RiskSummary;
   capabilities: ProtocolCapabilities;
+  isSubmitting: boolean;
 }

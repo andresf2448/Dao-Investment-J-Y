@@ -1,13 +1,12 @@
-import { addresses } from "@dao/contracts-sdk";
 import { useEffect, useMemo, useState } from "react";
-import { useChainId, useConnection } from "wagmi";
-import { encodeAbiParameters } from "viem";
+import { useChainId, useConnection, useReadContracts } from "wagmi";
 import type { Address } from "viem";
 import type {
   VaultDetailControls,
   VaultDetailData,
   VaultDetailModel,
   VaultDetailPosition,
+  VaultStrategyAllocationInput,
 } from "@/types/models/vaultDetail";
 import { useProtocolCapabilities } from "./useProtocolCapabilities";
 import Swal from "sweetalert2";
@@ -26,6 +25,7 @@ import useWriteContracts from "./useWriteContracts";
 import { useProtocolReads } from "./useProtocolReads";
 import type { ProtocolReadDefinition } from "./useProtocolReads";
 import useProtocolReadExecutor from "./useProtocolReadExecutor";
+import { getReadContractResult } from "./shared/contractResults";
 import { resolveProtocolContract } from "./protocolContracts";
 
 type VaultDetailProtocolContext = {
@@ -55,7 +55,10 @@ const vaultDetailProtocolDefinitions: ProtocolReadDefinition<
   },
 ];
 
-export function useVaultDetailModel(vaultAddress?: string): VaultDetailModel {
+export function useVaultDetailModel(
+  vaultAddress?: string,
+  strategyAllocations: VaultStrategyAllocationInput[] = [],
+): VaultDetailModel {
   const chainId = useChainId();
   const capabilities = useProtocolCapabilities();
   const connection = useConnection();
@@ -119,9 +122,194 @@ export function useVaultDetailModel(vaultAddress?: string): VaultDetailModel {
 
   const assetReads = useProtocolReads(assetDefinitions);
 
+  const strategyRouterConfig = useMemo(
+    () => resolveProtocolContract(chainId, "getStrategyRouterContract"),
+    [chainId],
+  );
+
+  const { data: strategyRouterAdaptersData } = useReadContracts({
+    allowFailure: true,
+    contracts:
+      strategyRouterConfig && resolvedVaultAddress
+        ? [
+            {
+              abi: strategyRouterConfig.abi,
+              address: strategyRouterConfig.address,
+              functionName: "getAllowedAdapters" as const,
+            },
+          ]
+        : [],
+    query: {
+      enabled: Boolean(strategyRouterConfig && resolvedVaultAddress),
+    },
+  });
+
+  const strategyRouterAdapters = useMemo(() => {
+    return (
+      (getReadContractResult<readonly Address[] | Address[]>(
+        strategyRouterAdaptersData?.[0],
+      ) ?? []) as Address[]
+    ).map((adapter) => adapter.toLowerCase());
+  }, [strategyRouterAdaptersData]);
+
+  const strategyAllocationReadContracts = useMemo(() => {
+    if (!strategyRouterConfig) {
+      return [];
+    }
+
+    return strategyAllocations.flatMap((allocation) =>
+      isValidAddress(allocation.adapter.trim())
+        ? [
+            {
+              abi: strategyRouterConfig.abi,
+              address: strategyRouterConfig.address,
+              functionName: "isAdapterAllowed" as const,
+              args: [allocation.adapter.trim() as Address],
+            },
+          ]
+        : [],
+    );
+  }, [strategyAllocations, strategyRouterConfig]);
+
+  const { data: strategyAllocationAllowedData } = useReadContracts({
+    allowFailure: true,
+    contracts: strategyAllocationReadContracts,
+    query: {
+      enabled: strategyAllocationReadContracts.length > 0,
+    },
+  });
+
+  const strategyAllocationAdapterCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const allocation of strategyAllocations) {
+      const adapter = allocation.adapter.trim().toLowerCase();
+      if (!adapter || !isValidAddress(adapter)) {
+        continue;
+      }
+
+      counts.set(adapter, (counts.get(adapter) ?? 0) + 1);
+    }
+
+    return counts;
+  }, [strategyAllocations]);
+
+  const strategyAllocationStatuses = useMemo(() => {
+    let readIndex = 0;
+
+    return strategyAllocations.map((allocation) => {
+      const adapter = allocation.adapter.trim();
+      const normalizedAdapter = adapter.toLowerCase();
+      const percentage = allocation.percentage.trim();
+      const isAdapterValid = adapter !== "" && isValidAddress(adapter);
+      const isDuplicateAdapter =
+        isAdapterValid &&
+        (strategyAllocationAdapterCounts.get(normalizedAdapter) ?? 0) > 1;
+      const percentageValue = Number(percentage);
+      const hasPercentage = percentage !== "";
+      const isPercentageValid =
+        hasPercentage &&
+        Number.isInteger(percentageValue) &&
+        percentageValue > 0;
+      const readResult = isAdapterValid
+        ? strategyAllocationAllowedData?.[readIndex++]
+        : undefined;
+      const isQueryLoaded = isAdapterValid ? readResult !== undefined : false;
+      const isAdapterAllowed = isAdapterValid
+        ? getReadContractResult<boolean>(readResult) ?? false
+        : false;
+      const isValidationPending =
+        isAdapterValid && isPercentageValid && !isQueryLoaded;
+      const isComplete =
+        isAdapterValid &&
+        isPercentageValid &&
+        !isDuplicateAdapter &&
+        isQueryLoaded &&
+        isAdapterAllowed;
+
+      let error: string | undefined;
+
+      if (adapter === "" && percentage === "") {
+        error = "Add an adapter address and its percentage.";
+      } else if (!isAdapterValid) {
+        error = "Enter a valid adapter address.";
+      } else if (isDuplicateAdapter) {
+        error = "Duplicate adapters are not allowed.";
+      } else if (!isPercentageValid) {
+        error = "Enter a percentage greater than 0.";
+      } else if (isValidationPending) {
+        error = "Validating adapter in StrategyRouter...";
+      } else if (isQueryLoaded && !isAdapterAllowed) {
+        error = "Adapter is not enabled in StrategyRouter.";
+      }
+
+      return {
+        adapter,
+        percentage,
+        isAdapterValid,
+        isAdapterAllowed,
+        isQueryLoaded,
+        isComplete,
+        isValidationPending,
+        error,
+      };
+    });
+  }, [strategyAllocations, strategyAllocationAllowedData, strategyAllocationAdapterCounts]);
+
+  const strategyAllocationTotal = useMemo(
+    () =>
+      strategyAllocationStatuses.reduce((total, row) => {
+        const value = Number(row.percentage);
+        return Number.isFinite(value) && value > 0 ? total + value : total;
+      }, 0),
+    [strategyAllocationStatuses],
+  );
+
+  const strategyExecutionMessage = useMemo(() => {
+    if (strategyAllocationStatuses.length === 0) {
+      return "Add at least one adapter allocation to execute the strategy.";
+    }
+
+    const incompleteRow = strategyAllocationStatuses.find(
+      (row) => !row.isComplete,
+    );
+    if (incompleteRow?.error) {
+      return incompleteRow.error;
+    }
+
+    if (strategyAllocationTotal > 100) {
+      return "The total allocation cannot exceed 100%.";
+    }
+
+    if (strategyAllocationTotal < 100) {
+      return "The total allocation must equal 100% before execution.";
+    }
+
+    return undefined;
+  }, [strategyAllocationStatuses, strategyAllocationTotal]);
+
+  const strategyExecutionReady =
+    strategyAllocationStatuses.length > 0 &&
+    strategyAllocationStatuses.every((row) => row.isComplete) &&
+    strategyAllocationTotal === 100;
+
+  useEffect(() => {
+    if (resolvedVaultAddress && connection.address) {
+      return;
+    }
+
+    setVaultDecimals(undefined);
+    setMintedShares(undefined);
+    setMaxWithdraw(undefined);
+    setMaxRedeem(undefined);
+    setTotalAssets(undefined);
+    setDepositedAssets(undefined);
+  }, [resolvedVaultAddress, connection.address]);
+
   // Fetch vault data using executeRead
   useEffect(() => {
     if (!resolvedVaultAddress || !connection.address) return;
+    let isActive = true;
 
     const fetchVaultData = async () => {
       try {
@@ -129,47 +317,65 @@ export function useVaultDetailModel(vaultAddress?: string): VaultDetailModel {
           functionName: "decimals",
           functionContract: "getVaultImplementationContract",
           args: [],
+          address: resolvedVaultAddress,
         });
+        if (!isActive) return;
         setVaultDecimals(decimals as number);
 
         const shares = await executeRead({
           functionName: "balanceOf",
           functionContract: "getVaultImplementationContract",
           args: [connection.address],
+          address: resolvedVaultAddress,
         });
+        if (!isActive) return;
         setMintedShares(shares as bigint);
 
         const maxW = await executeRead({
           functionName: "maxWithdraw",
           functionContract: "getVaultImplementationContract",
           args: [connection.address],
+          address: resolvedVaultAddress,
         });
+        if (!isActive) return;
         setMaxWithdraw(maxW as bigint);
 
         const maxR = await executeRead({
           functionName: "maxRedeem",
           functionContract: "getVaultImplementationContract",
           args: [connection.address],
+          address: resolvedVaultAddress,
         });
+        if (!isActive) return;
         setMaxRedeem(maxR as bigint);
 
         const totalA = await executeRead({
           functionName: "totalAssets",
           functionContract: "getVaultImplementationContract",
           args: [],
+          address: resolvedVaultAddress,
         });
+        if (!isActive) return;
         setTotalAssets(totalA as bigint);
       } catch (error) {
         console.error("Error fetching vault data:", error);
       }
     };
 
-    fetchVaultData();
+    void fetchVaultData();
+
+    return () => {
+      isActive = false;
+    };
   }, [resolvedVaultAddress, connection.address, executeRead, refreshTrigger]);
 
   // Fetch preview data
   useEffect(() => {
-    if (!resolvedVaultAddress || !mintedShares || mintedShares <= 0n) return;
+    if (!resolvedVaultAddress || !mintedShares || mintedShares <= 0n) {
+      setDepositedAssets(0n);
+      return;
+    }
+    let isActive = true;
 
     const fetchPreviewData = async () => {
       try {
@@ -177,14 +383,20 @@ export function useVaultDetailModel(vaultAddress?: string): VaultDetailModel {
           functionName: "previewRedeem",
           functionContract: "getVaultImplementationContract",
           args: [mintedShares],
+          address: resolvedVaultAddress,
         });
+        if (!isActive) return;
         setDepositedAssets(deposited as bigint);
       } catch (error) {
         console.error("Error fetching preview data:", error);
       }
     };
 
-    fetchPreviewData();
+    void fetchPreviewData();
+
+    return () => {
+      isActive = false;
+    };
   }, [resolvedVaultAddress, mintedShares, executeRead, refreshTrigger]);
 
   const mintedSharesValueTyped = mintedShares ?? 0n;
@@ -216,26 +428,30 @@ export function useVaultDetailModel(vaultAddress?: string): VaultDetailModel {
   const totalAssetsValue = totalAssetsValueTyped;
   const depositedAssetsValue = depositedAssetsValueTyped;
 
-
-
-
-
-
-
-  const aaveAdapterAddress = useMemo(
-    () =>
-      chainId
-        ? addresses[chainId as keyof typeof addresses]?.aaveV3Adapter
-        : undefined,
-    [chainId],
-  );
+  // Explicitly refresh total assets to ensure UI reflects on-chain changes
+  const refreshTotalAssets = async () => {
+    if (!resolvedVaultAddress) return;
+    try {
+      const totalA = await executeRead({
+        functionName: "totalAssets",
+        functionContract: "getVaultImplementationContract",
+        args: [],
+        address: resolvedVaultAddress,
+      });
+      setTotalAssets(totalA as bigint);
+    } catch (error) {
+      console.error("Error refreshing Vault Total Assets:", error);
+    }
+  };
 
   const refreshVaultData = async () => {
     await Promise.allSettled([
       refetchProtocol?.(),
       assetReads.refetch?.(),
-      setRefreshTrigger(prev => prev + 1),
     ]);
+    // Also refresh total assets explicitly to guarantee UI consistency
+    await refreshTotalAssets();
+    setRefreshTrigger(prev => prev + 1);
   };
 
   const approveAssetForVault = async (amount: bigint) => {
@@ -438,43 +654,70 @@ export function useVaultDetailModel(vaultAddress?: string): VaultDetailModel {
   };
 
   const executeStrategy = async (): Promise<boolean> => {
-    if (!resolvedVaultAddress || !aaveAdapterAddress) {
+    if (!resolvedVaultAddress || !strategyRouterConfig) {
       await Swal.fire({
         title: "Strategy execution unavailable",
-        text: "No strategy adapter is configured for this network.",
+        text: "The StrategyRouter contract is unavailable for this network.",
         icon: "warning",
         confirmButtonText: "OK",
       });
       return false;
     }
 
-    if (maxWithdrawValue <= 0n) {
+    if (!capabilities.canExecuteStrategy || !isVaultGuardian) {
       await Swal.fire({
-        title: "No assets available",
-        text: "There are no withdrawable assets available to deploy through the strategy.",
+        title: "Guardian access required",
+        text: "Only the guardian assigned to this vault can execute the strategy.",
         icon: "warning",
         confirmButtonText: "OK",
       });
       return false;
     }
 
-    const encodedData = encodeAbiParameters(
-      [{ type: "uint8" }, { type: "uint256" }],
-      [0, maxWithdrawValue],
+    if (!vaultDetailTyped?.active || isExecutionPausedTyped) {
+      await Swal.fire({
+        title: "Strategy execution restricted",
+        text: "Execution is currently restricted by vault status or risk controls.",
+        icon: "warning",
+        confirmButtonText: "OK",
+      });
+      return false;
+    }
+
+    if (!strategyExecutionReady) {
+      await Swal.fire({
+        title: "Strategy allocation incomplete",
+        text:
+          strategyExecutionMessage ??
+          "Fill all adapter rows and make sure the allocation totals 100%.",
+        icon: "warning",
+        confirmButtonText: "OK",
+      });
+      return false;
+    }
+
+    const adapters = strategyAllocationStatuses.map(
+      (allocation) => allocation.adapter.trim() as Address,
+    );
+    const percentages = strategyAllocationStatuses.map((allocation) =>
+      BigInt(allocation.percentage.trim()),
     );
 
     return executeVaultTransaction(
       "Execute strategy",
-      "Confirm the guardian strategy execution in your wallet.",
+      "Confirm the guardian strategy execution in your wallet. The vault allocation will be routed across the selected adapters.",
       async () => {
-        const contract = resolveProtocolContract(chainId, "getVaultImplementationContract");
+        const contract = resolveProtocolContract(
+          chainId,
+          "getVaultImplementationContract",
+        );
         if (!contract) throw new Error("Vault implementation contract not found");
 
         return executeWrite({
           abi: contract.abi,
           address: resolvedVaultAddress,
           functionName: "executeStrategy",
-          args: [aaveAdapterAddress, encodedData],
+          args: [adapters, percentages],
           options: { waitForReceipt: true },
         });
       },
@@ -548,6 +791,10 @@ export function useVaultDetailModel(vaultAddress?: string): VaultDetailModel {
     vault,
     position,
     controls,
+    strategyRouterAdapters,
+    strategyAllocationStatuses,
+    strategyExecutionMessage,
+    strategyExecutionReady,
     capabilities,
     isSubmitting,
     depositAssetBalance,

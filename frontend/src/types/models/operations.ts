@@ -15,6 +15,7 @@ export interface InfrastructureWiring {
   factoryCore: string;
   guardianAdministrator: string;
   vaultRegistry: string;
+  adapterStrategy: string;
   treasuryProtocolCore: string;
 }
 
@@ -52,6 +53,12 @@ export interface OperationsWiringForm {
   setTreasuryProtocolCoreInput: (value: string) => void;
   treasuryProtocolCoreError?: string;
   canSubmitTreasuryProtocolCore: boolean;
+  adapterStrategyInput: string;
+  setAdapterStrategyInput: (value: string) => void;
+  adapterStrategyError?: string;
+  adapterStrategyStatusMessage?: string;
+  canSubmitAdapterStrategy: boolean;
+  adapterStrategyAllowed: boolean;
   wiringPermissionMessage?: string;
 }
 
@@ -66,6 +73,7 @@ export interface OperationsActions {
   setFactoryCore: () => Promise<void>;
   setGuardianAdministrator: () => Promise<void>;
   setVaultRegistry: () => Promise<void>;
+  setAdapterStrategy: () => Promise<void>;
   setTreasuryProtocolCore: () => Promise<void>;
 }
 

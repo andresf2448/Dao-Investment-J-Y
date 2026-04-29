@@ -318,6 +318,24 @@ export default function OperationsPage() {
             onAction={actions.setVaultRegistry}
           />
           <WiringCard
+            title="Adapter Strategy"
+            description="Create a proposal to enable a candidate adapter in StrategyRouter."
+            action="Set Adapter Strategy"
+            value={wiring.adapterStrategy}
+            inputValue={wiringForm.adapterStrategyInput}
+            onInputChange={wiringForm.setAdapterStrategyInput}
+            actionDisabled={
+              !capabilities.canCreateProposal ||
+              !wiringForm.canSubmitAdapterStrategy
+            }
+            error={
+              wiringForm.adapterStrategyError ??
+              wiringForm.wiringPermissionMessage ??
+              wiringForm.adapterStrategyStatusMessage
+            }
+            onAction={actions.setAdapterStrategy}
+          />
+          <WiringCard
             title="Treasury Core Assignment"
             description="Configure the ProtocolCore reference used by Treasury."
             action="Set Protocol Core"

@@ -33,12 +33,13 @@ contract DeployInvestmentDao is Script {
     // Deploy mocks for anvil network
     if (block.chainid == 31337) { // Anvil chain ID
       DeployMocks deployMocks = new DeployMocks();
-      (address mockERC20, address mockAavePool) = deployMocks.run();
+      (address mockERC20, address mockAavePool, address mockV3Aggregator) = deployMocks.run();
 
       // Update network config with deployed mock addresses
       networkConfig.allowedGenesisTokens[0] = mockERC20;
       networkConfig.allowedVaultToken = mockERC20;
       networkConfig.aavePool = mockAavePool;
+      networkConfig.mockV3Aggregator = mockV3Aggregator;
     }
 
     (

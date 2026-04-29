@@ -87,7 +87,7 @@ contract RiskManager is
     if (isStable) {
       if (depegMinBps == 0 || depegMaxBps == 0)
         revert RiskManager__InvalidBpsRange();
-      if (depegMinBps > BPS_DENOMINATOR || depegMaxBps > BPS_DENOMINATOR)
+      if (depegMinBps > BPS_DENOMINATOR || depegMaxBps < BPS_DENOMINATOR)
         revert RiskManager__InvalidBpsRange();
       if (depegMinBps > depegMaxBps)
         revert RiskManager__InvalidBpsRange();
@@ -121,7 +121,7 @@ contract RiskManager is
     emit ExecutionPausedSet(true);
   }
 
-  function unpauseAdapterExecution() external onlyRole(MANAGER_ROLE) {
+  function unpauseAdapterExecution() external onlyRole(EMERGENCY_ROLE) {
     executionPaused = false;
     emit ExecutionPausedSet(false);
   }

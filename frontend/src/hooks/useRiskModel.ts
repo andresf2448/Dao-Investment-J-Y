@@ -1,7 +1,8 @@
-import { getRiskManagerContract } from "@dao/contracts-sdk";
+import { getDaoGovernorContract, getRiskManagerContract } from "@dao/contracts-sdk";
 import { useCallback, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import { useChainId, useReadContracts } from "wagmi";
+import { encodeFunctionData, parseEventLogs, type Address } from "viem";
 import type {
   RiskActions,
   RiskAsset,
@@ -16,6 +17,7 @@ import {
   formatTokenAmount,
   getTransactionError,
   isValidAddress,
+  saveProposalMetadata,
 } from "@/utils";
 import { useProtocolCapabilities } from "./useProtocolCapabilities";
 import {
@@ -34,6 +36,9 @@ export function useRiskModel(): RiskModel {
   const riskManagerConfig = useMemo(() => {
     return resolveOptionalContract(chainId, getRiskManagerContract);
   }, [chainId]);
+  const governorConfig = useMemo(() => {
+    return resolveOptionalContract(chainId, getDaoGovernorContract);
+  }, [chainId]);
 
   const [assetAddress, setAssetAddress] = useState("");
   const [priceFeed, setPriceFeed] = useState("");
@@ -41,6 +46,7 @@ export function useRiskModel(): RiskModel {
   const [stableAsset, setStableAsset] = useState("");
   const [depegMinBps, setDepegMinBps] = useState("");
   const [depegMaxBps, setDepegMaxBps] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data, refetch } = useReadContracts({
     allowFailure: true,
@@ -174,7 +180,7 @@ export function useRiskModel(): RiskModel {
       : undefined;
 
   const canUpdateAssetConfiguration =
-    capabilities.canResumeRiskExecution &&
+    capabilities.canCreateProposal &&
     isValidAddress(assetAddress.trim()) &&
     isValidAddress(priceFeed.trim()) &&
     heartbeat.trim() !== "" &&
@@ -188,8 +194,8 @@ export function useRiskModel(): RiskModel {
     Number.isInteger(Number(depegMaxBps)) &&
     Number(depegMaxBps) >= Number(depegMinBps || 0);
 
-  const assetConfigurationLockedMessage = !capabilities.canResumeRiskExecution
-    ? "Asset configuration updates should only be available to manager operators."
+  const assetConfigurationLockedMessage = !capabilities.canCreateProposal
+    ? "Asset configuration updates are submitted as governance proposals and require enough voting power."
     : undefined;
 
   const executeOperation = useCallback(
@@ -268,38 +274,144 @@ export function useRiskModel(): RiskModel {
   );
 
   const updateAssetConfiguration = useCallback(
-    () =>
-      executeOperation(
-        "Updating asset risk config",
-        {
-          functionContract: "getRiskManagerContract",
-          functionName: "setAssetConfig",
+    async () => {
+      if (!canUpdateAssetConfiguration || isSubmitting) {
+        return;
+      }
+
+      if (!riskManagerConfig || !governorConfig) {
+        throw new Error("Governance contracts unavailable.");
+      }
+
+      const confirmation = await Swal.fire({
+        title: "Submit proposal",
+        text: "Confirm the proposal submission transaction in your wallet.",
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Yes, submit",
+        cancelButtonText: "Cancel",
+        reverseButtons: true,
+      });
+
+      if (!confirmation.isConfirmed) {
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      Swal.fire({
+        title: "Submitting proposal",
+        text: "Confirm the proposal submission transaction in your wallet.",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      const calldata = encodeFunctionData({
+        abi: riskManagerConfig.abi,
+        functionName: "setAssetConfig",
+        args: [
+          assetAddress.trim() as Address,
+          priceFeed.trim() as Address,
+          BigInt(heartbeat),
+          stableAsset.trim() === "true",
+          Number(depegMinBps),
+          Number(depegMaxBps),
+          true,
+        ],
+      }) as `0x${string}`;
+
+      const proposalTitle = "Update asset configuration";
+      const proposalDescription =
+        "This proposal requests DAO approval to update the RiskManager asset configuration.";
+      const composedDescription = [proposalTitle, proposalDescription].join(
+        "\n\n",
+      );
+
+      try {
+        const response = await executeWrite({
+          functionContract: "getDaoGovernorContract",
+          functionName: "propose",
           args: [
-            assetAddress.trim(),
-            priceFeed.trim(),
-            BigInt(heartbeat),
-            stableAsset.trim() === "true",
-            Number(depegMinBps),
-            Number(depegMaxBps),
-            true,
+            [riskManagerConfig.address],
+            [0n],
+            [calldata],
+            composedDescription,
           ],
-        },
-        () => {
-          setAssetAddress("");
-          setPriceFeed("");
-          setHeartbeat("");
-          setStableAsset("");
-          setDepegMinBps("");
-          setDepegMaxBps("");
-        },
-      ),
+          options: {
+            waitForReceipt: true,
+          },
+        });
+
+        if (response?.receipt?.status !== "success") {
+          throw new Error("Proposal submission failed.");
+        }
+
+        const proposalCreatedEvent = parseEventLogs({
+          abi: governorConfig.abi,
+          logs: response.receipt?.logs ?? [],
+          eventName: "ProposalCreated",
+        })?.[0];
+        const proposalId = proposalCreatedEvent?.args?.proposalId?.toString();
+
+        if (proposalId) {
+          saveProposalMetadata(chainId, {
+            proposalId,
+            title: proposalTitle,
+            description: proposalDescription,
+            composedDescription,
+          });
+        }
+
+        setAssetAddress("");
+        setPriceFeed("");
+        setHeartbeat("");
+        setStableAsset("");
+        setDepegMinBps("");
+        setDepegMaxBps("");
+
+        await refetch();
+        Swal.close();
+
+        await Swal.fire({
+          title: "Proposal submitted",
+          text: "Your governance proposal was sent successfully.",
+          icon: "success",
+          confirmButtonText: "OK",
+        });
+      } catch (error) {
+        const transactionError = getTransactionError(error);
+
+        Swal.hideLoading();
+        Swal.update({
+          title: transactionError.title,
+          text: transactionError.message,
+          icon: "error",
+          showConfirmButton: true,
+          confirmButtonText: "OK",
+          allowOutsideClick: true,
+          allowEscapeKey: true,
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
     [
       assetAddress,
       depegMaxBps,
       depegMinBps,
-      executeOperation,
+      canUpdateAssetConfiguration,
+      chainId,
+      executeWrite,
+      governorConfig,
+      isSubmitting,
       heartbeat,
       priceFeed,
+      refetch,
+      riskManagerConfig,
       stableAsset,
     ],
   );
@@ -340,5 +452,6 @@ export function useRiskModel(): RiskModel {
     actions,
     summary,
     capabilities,
+    isSubmitting,
   };
 }

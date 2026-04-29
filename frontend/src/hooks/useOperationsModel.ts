@@ -1,6 +1,7 @@
 import {
   getDaoGovernorContract,
   getProtocolCoreContract,
+  getStrategyRouterContract,
   getTreasuryContract,
 } from "@dao/contracts-sdk";
 import { useCallback, useMemo, useState } from "react";
@@ -26,6 +27,7 @@ import {
   ZERO_ADDRESS,
 } from "./shared/contractResults";
 import { resolveOptionalContract } from "./shared/resolveContract";
+import { useQueryClient } from "@tanstack/react-query";
 import { useProtocolReads } from "./useProtocolReads";
 import useWriteContracts from "./useWriteContracts";
 
@@ -33,6 +35,7 @@ export function useOperationsModel(): OperationsModel {
   const chainId = useChainId();
   const capabilities = useProtocolCapabilities();
   const { executeWrite } = useWriteContracts();
+  const queryClient = useQueryClient();
   const knownAssets = useMemo(() => getKnownProtocolAssets(chainId), [chainId]);
   const [supportedVaultAsset, setSupportedVaultAsset] = useState("");
   const [supportedGenesisToken, setSupportedGenesisToken] = useState("");
@@ -43,6 +46,7 @@ export function useOperationsModel(): OperationsModel {
   const [vaultRegistryInput, setVaultRegistryInput] = useState("");
   const [treasuryProtocolCoreInput, setTreasuryProtocolCoreInput] =
     useState("");
+  const [adapterStrategyInput, setAdapterStrategyInput] = useState("");
   const {
     isVaultCreationPaused,
     isDepositsPaused,
@@ -77,6 +81,11 @@ export function useOperationsModel(): OperationsModel {
   const treasuryConfig = useMemo(() => {
     return resolveOptionalContract(chainId, getTreasuryContract);
   }, [chainId]);
+
+  const strategyRouterConfig = useMemo(
+    () => resolveOptionalContract(chainId, getStrategyRouterContract),
+    [chainId],
+  );
 
   const governorConfig = useMemo(
     () => resolveOptionalContract(chainId, getDaoGovernorContract),
@@ -197,6 +206,71 @@ export function useOperationsModel(): OperationsModel {
     !isValidAddress(treasuryProtocolCoreInput.trim())
       ? "Enter a valid ProtocolCore address."
       : undefined;
+  const adapterStrategyInputTrimmed = adapterStrategyInput.trim();
+  const shouldQueryAdapterStrategy =
+    Boolean(strategyRouterConfig) &&
+    isValidAddress(adapterStrategyInputTrimmed);
+
+  const adapterStrategyValidationReads = useReadContracts({
+    allowFailure: true,
+    contracts:
+      strategyRouterConfig && shouldQueryAdapterStrategy
+        ? [
+            {
+              abi: strategyRouterConfig.abi,
+              address: strategyRouterConfig.address,
+              functionName: "isAdapterAllowed" as const,
+              args: [adapterStrategyInputTrimmed as Address],
+            },
+            {
+              abi: strategyRouterConfig.abi,
+              address: strategyRouterConfig.address,
+              functionName: "getAllowedAdapters" as const,
+            },
+          ]
+        : [],
+    query: {
+      enabled: shouldQueryAdapterStrategy,
+    },
+  });
+
+  const adapterStrategyAllowedByFunction =
+    getReadContractResult<boolean>(adapterStrategyValidationReads.data?.[0]) ===
+    true;
+
+  const adapterStrategyAllowedAdapters = (
+    getReadContractResult<readonly Address[] | Address[]>(
+      adapterStrategyValidationReads.data?.[1],
+    ) ?? []
+  ).map((adapter) => adapter.toLowerCase());
+
+  const adapterStrategyAllowed =
+    adapterStrategyAllowedByFunction ||
+    adapterStrategyAllowedAdapters.includes(
+      adapterStrategyInputTrimmed.toLowerCase(),
+    );
+  const adapterStrategyQueryLoaded = Boolean(
+    adapterStrategyValidationReads.data?.length,
+  );
+
+  const adapterStrategyError =
+    adapterStrategyInputTrimmed !== "" &&
+    !isValidAddress(adapterStrategyInputTrimmed)
+      ? "Enter a valid adapter address."
+      : undefined;
+
+  const adapterStrategyStatusMessage =
+    adapterStrategyInputTrimmed === ""
+      ? undefined
+      : !isValidAddress(adapterStrategyInputTrimmed)
+      ? undefined
+      : adapterStrategyValidationReads.isLoading
+      ? "Checking adapter against StrategyRouter..."
+      : adapterStrategyAllowed
+      ? "Adapter already exists in StrategyRouter."
+      : adapterStrategyValidationReads.isError
+      ? "Unable to validate adapter against StrategyRouter."
+      : "Adapter is not enabled in StrategyRouter.";
 
   const canSubmitFactoryRouter =
     capabilities.canCreateProposal &&
@@ -211,6 +285,10 @@ export function useOperationsModel(): OperationsModel {
   const canSubmitTreasuryProtocolCore =
     capabilities.canCreateProposal &&
     isValidAddress(treasuryProtocolCoreInput.trim());
+  const canSubmitAdapterStrategy =
+    isValidAddress(adapterStrategyInputTrimmed) &&
+    adapterStrategyQueryLoaded &&
+    !adapterStrategyAllowed;
 
   const proposalPermissionMessage = !capabilities.canCreateProposal
     ? "Governance voting power is required to submit proposal-based changes."
@@ -522,6 +600,27 @@ export function useOperationsModel(): OperationsModel {
     },
     [createGovernanceProposal, vaultRegistryInput, vaultFactoryConfig],
   );
+  const setAdapterStrategy = useCallback(
+    () => {
+      if (!strategyRouterConfig) {
+        throw new Error("StrategyRouter contract unavailable.");
+      }
+
+      return createGovernanceProposal(
+        "Set adapter strategy",
+        "This proposal requests DAO approval to update the StrategyRouter adapter approval state.",
+        strategyRouterConfig.address as Address,
+        strategyRouterConfig.abi,
+        "setAdapterAllowed",
+        [adapterStrategyInput.trim() as Address, true],
+      ).then(() => {
+        setAdapterStrategyInput("");
+        // Refresh adapter-related read data to reflect the new state
+        queryClient.invalidateQueries();
+      });
+    },
+    [createGovernanceProposal, adapterStrategyInput, strategyRouterConfig],
+  );
   const setTreasuryProtocolCore = useCallback(
     () => {
       if (!treasuryConfig) {
@@ -546,7 +645,6 @@ export function useOperationsModel(): OperationsModel {
       getReadContractResult<string>(wiringData?.[1]) ?? ZERO_ADDRESS,
       getReadContractResult<string>(wiringData?.[2]) ?? ZERO_ADDRESS,
       getReadContractResult<string>(wiringData?.[3]) ?? ZERO_ADDRESS,
-      getReadContractResult<string>(wiringData?.[4]) ?? ZERO_ADDRESS,
     ],
     [wiringData],
   );
@@ -556,7 +654,8 @@ export function useOperationsModel(): OperationsModel {
     factoryCore: formatAddress(wiringValues[1]),
     guardianAdministrator: formatAddress(wiringValues[2]),
     vaultRegistry: formatAddress(wiringValues[3]),
-    treasuryProtocolCore: formatAddress(wiringValues[4]),
+    adapterStrategy: formatAddress(strategyRouterConfig?.address ?? ZERO_ADDRESS),
+    treasuryProtocolCore: formatAddress(treasuryConfig?.address ?? ZERO_ADDRESS),
   };
 
   const configuredWiringCount = wiringValues.filter(
@@ -568,7 +667,7 @@ export function useOperationsModel(): OperationsModel {
     vaultDeposits: isDepositsPaused ? "paused" : "enabled",
     supportedAssetsCount: supportedVaultAssetsCount,
     infrastructureState:
-      configuredWiringCount === 5
+      configuredWiringCount === 4
         ? "linked"
         : configuredWiringCount > 0
           ? "partial"
@@ -615,6 +714,12 @@ export function useOperationsModel(): OperationsModel {
       setTreasuryProtocolCoreInput,
       treasuryProtocolCoreError,
       canSubmitTreasuryProtocolCore,
+      adapterStrategyInput,
+      setAdapterStrategyInput,
+      adapterStrategyError,
+      adapterStrategyStatusMessage,
+      canSubmitAdapterStrategy,
+      adapterStrategyAllowed,
       wiringPermissionMessage: proposalPermissionMessage,
     },
     actions: {
@@ -628,6 +733,7 @@ export function useOperationsModel(): OperationsModel {
       setFactoryCore,
       setGuardianAdministrator,
       setVaultRegistry,
+      setAdapterStrategy,
       setTreasuryProtocolCore,
     },
     summary: {

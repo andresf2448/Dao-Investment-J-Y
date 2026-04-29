@@ -46,8 +46,8 @@ contract VaultImplementation is
   event CoreUpdated(address indexed oldCore, address indexed newCore);
   event StrategyExecutionRequest(
     address indexed guardian,
-    address indexed adapter,
-    bytes data
+    address[] adapters,
+    uint256[] percentages
   );
   event RouterCallExecuted(
     address indexed target,
@@ -65,6 +65,7 @@ contract VaultImplementation is
   error VaultImplementation__DepositsPaused();
   error VaultImplementation__NotRouter();
   error VaultImplementation__ExternalCallFailed();
+  error VaultImplementation__InvalidStrategyAllocation();
 
   constructor() {
     _disableInitializers();
@@ -200,18 +201,24 @@ contract VaultImplementation is
   }
 
   function executeStrategy(
-    address adapter,
-    bytes calldata data
+    address[] calldata adapters,
+    uint256[] calldata percentages
   ) external onlyRole(GUARDIAN_ROLE) whenNotPaused {
-    if(adapter == address(0)) revert CommonErrors.ZeroAddress();
+    if(adapters.length == 0 || adapters.length != percentages.length)
+      revert VaultImplementation__InvalidStrategyAllocation();
 
-    emit StrategyExecutionRequest(msg.sender, adapter, data);
+    for(uint256 i = 0; i < adapters.length; i++) {
+      if(adapters[i] == address(0))
+        revert CommonErrors.ZeroAddress();
+    }
 
-    IStrategyRouter(router).execute(
-      adapter,
+    emit StrategyExecutionRequest(msg.sender, adapters, percentages);
+
+    IStrategyRouter(router).executeMultiple(
       address(this),
       asset(),
-      data
+      adapters,
+      percentages
     );
   }
 

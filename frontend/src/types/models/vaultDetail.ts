@@ -24,10 +24,30 @@ export interface VaultDetailControls {
   strategyExecutionEnabled: boolean;
 }
 
+export interface VaultStrategyAllocationInput {
+  adapter: string;
+  percentage: string;
+}
+
+export interface VaultStrategyAllocationStatus {
+  adapter: string;
+  percentage: string;
+  isAdapterValid: boolean;
+  isAdapterAllowed: boolean;
+  isQueryLoaded: boolean;
+  isComplete: boolean;
+  isValidationPending: boolean;
+  error?: string;
+}
+
 export interface VaultDetailModel {
   vault: VaultDetailData;
   position: VaultDetailPosition;
   controls: VaultDetailControls;
+  strategyRouterAdapters: string[];
+  strategyAllocationStatuses: VaultStrategyAllocationStatus[];
+  strategyExecutionMessage?: string;
+  strategyExecutionReady: boolean;
   capabilities: ProtocolCapabilities;
   isSubmitting: boolean;
   depositAssetBalance: string;

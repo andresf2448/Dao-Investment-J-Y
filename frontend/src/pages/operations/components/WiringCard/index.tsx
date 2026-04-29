@@ -7,7 +7,7 @@ interface WiringCardProps {
   onInputChange?: (value: string) => void;
   actionDisabled?: boolean;
   error?: string;
-  onAction?: () => void;
+  onAction?: () => void | Promise<void>;
 }
 
 export function WiringCard({
@@ -19,6 +19,7 @@ export function WiringCard({
   onInputChange,
   actionDisabled,
   error,
+  note,
   onAction,
 }: WiringCardProps) {
   return (

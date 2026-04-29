@@ -12,8 +12,9 @@ import { HealthBadge, ConfigField } from "./components";
 import { formatExecutionStatus } from "./formatters";
 
 export default function RiskPage() {
-  const { metrics, assets, form, actions, summary, capabilities } =
+  const { metrics, assets, form, actions, summary, capabilities, isSubmitting } =
     useRiskModel();
+  const isExecutionPaused = metrics.executionStatus === "paused";
 
   return (
     <div className="space-y-8">
@@ -95,7 +96,8 @@ export default function RiskPage() {
 
               {capabilities.canPauseRiskExecution ? (
                 <button
-                  className="btn-primary mt-4 inline-flex items-center gap-2"
+                  className="btn-primary mt-4 inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isExecutionPaused}
                   onClick={actions.pauseExecution}
                 >
                   <PauseCircle className="h-4 w-4" />
@@ -119,7 +121,8 @@ export default function RiskPage() {
 
               {capabilities.canResumeRiskExecution ? (
                 <button
-                  className="btn-secondary mt-4 inline-flex items-center gap-2"
+                  className="btn-secondary mt-4 inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!isExecutionPaused}
                   onClick={actions.resumeExecution}
                 >
                   <PlayCircle className="h-4 w-4" />
@@ -229,6 +232,13 @@ export default function RiskPage() {
       <section className="card">
         <div className="card-header">Asset Configuration</div>
 
+        <div className="px-6 pt-5">
+          <p className="text-sm leading-6 text-text-secondary">
+            This form builds a governance proposal that updates the RiskManager
+            asset configuration when submitted.
+          </p>
+        </div>
+
         <div className="card-content grid gap-5 lg:grid-cols-2">
           <ConfigField
             label="Asset Address"
@@ -276,16 +286,21 @@ export default function RiskPage() {
             inputMode="numeric"
           />
 
-          <div className="lg:col-span-2">
-            {capabilities.canResumeRiskExecution ? (
-              <button
-                className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!form.canUpdateAssetConfiguration}
-                onClick={actions.updateAssetConfiguration}
-              >
-                Update Asset Configuration
-              </button>
-            ) : (
+          <div className="lg:col-span-2 space-y-3">
+            <button
+              className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!form.canUpdateAssetConfiguration || isSubmitting}
+              onClick={actions.updateAssetConfiguration}
+            >
+              Update Asset Configuration
+            </button>
+
+            <p className="text-sm leading-6 text-text-secondary">
+              Submitting this change creates a proposal for governance review
+              before any RiskManager state is updated on-chain.
+            </p>
+
+            {!capabilities.canCreateProposal ? (
               <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-4">
                 <p className="text-sm font-medium text-yellow-800">
                   Configuration Locked
@@ -294,7 +309,7 @@ export default function RiskPage() {
                   {form.assetConfigurationLockedMessage}
                 </p>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </section>
