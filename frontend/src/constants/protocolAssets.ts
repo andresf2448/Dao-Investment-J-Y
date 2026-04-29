@@ -14,7 +14,7 @@ const protocolAssetsByChainId: Record<number, KnownProtocolAsset[]> = {
       decimals: 18,
     },
     {
-      address: "0x172076E0166D1F9Cc711C77Adf8488051744980C",
+      address: "0xD84379CEae14AA33C123Af12424A37803F885889",
       symbol: "USDC",
       decimals: 18,
     },

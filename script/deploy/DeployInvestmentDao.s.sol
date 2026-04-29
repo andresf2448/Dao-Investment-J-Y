@@ -214,7 +214,7 @@ contract DeployInvestmentDao is Script {
     console.log("AaveV3Adapter: ", aaveV3Adapter);
     console.log("================MOCK====================");
     if (block.chainid == 31337) {
-      console.log("MockERC20: ", networkConfig.allowedGenesisTokens[0]);
+      console.log("USDTGenesis: ", networkConfig.allowedGenesisTokens[0]);
       console.log("MockAavePool: ", networkConfig.aavePool);
     }
     console.log("========================================");

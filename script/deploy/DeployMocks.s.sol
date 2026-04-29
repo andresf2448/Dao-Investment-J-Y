@@ -15,12 +15,14 @@ contract DeployMocks is Script {
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;
 
     vm.startBroadcast(deployerPrivateKey);
-      MockERC20 mockERC20Instance = new MockERC20();
+      MockERC20 mockERC20Instance = new MockERC20("USDTGenesis", "USDTG", 18);
+      MockERC20 unlinkedTestToken = new MockERC20("StandaloneTestToken", "STAND", 18);
       MockAavePool mockAavePoolInstance = new MockAavePool();
       MockV3Aggregator mockV3AggregatorInstance = new MockV3Aggregator(8, 2000e8);
     vm.stopBroadcast();
 
-    console.log("MockERC20 deployed at:", address(mockERC20Instance));
+    console.log("USDTGenesis deployed at:", address(mockERC20Instance));
+    console.log("StandaloneTestToken deployed at:", address(unlinkedTestToken));
     console.log("MockAavePool deployed at:", address(mockAavePoolInstance));
     console.log("MockV3Aggregator deployed at:", address(mockV3AggregatorInstance));
 

@@ -174,8 +174,9 @@ contract SeedLocal is Script {
 
         // 2. Extend the local asset universe with a second mock token.
         address secondaryToken = _loadOrDeploySecondaryToken(networkConfig.deployerPrivateKey);
-        _configureAdditionalAssets(participants.adminGuardian.privateKey, contracts, secondaryToken);
-        _mintSeedAssets(networkConfig.deployerPrivateKey, contracts, participants, secondaryToken);
+        address usdcToken = _loadOrDeployUsdcToken(networkConfig.deployerPrivateKey);
+        _configureAdditionalAssets(participants.adminGuardian.privateKey, contracts, secondaryToken, usdcToken);
+        _mintSeedAssets(networkConfig.deployerPrivateKey, contracts, participants, secondaryToken, usdcToken);
 
         // 3. Activate guardians and create the local vault topology.
         ProposalSeeds memory proposalSeeds =
@@ -193,9 +194,9 @@ contract SeedLocal is Script {
         proposalSeeds.governorProposalCountAfterDemo = DaoGovernor(payable(contracts.daoGovernor)).proposalCount();
 
         // 6. Validate, log and persist the final seeded state.
-        _validateSeed(contracts, participants, vaultSeeds, proposalSeeds, secondaryToken);
-        _logSeed(contracts, participants, vaultSeeds, proposalSeeds, secondaryToken);
-        _writeSeedJson(contracts, participants, proposalSeeds, secondaryToken);
+        _validateSeed(contracts, participants, vaultSeeds, proposalSeeds, secondaryToken, usdcToken);
+        _logSeed(contracts, participants, vaultSeeds, proposalSeeds, secondaryToken, usdcToken);
+        _writeSeedJson(contracts, participants, proposalSeeds, secondaryToken, usdcToken);
     }
 
     // Read every deployed dependency from deployments/anvil.json.
@@ -294,20 +295,64 @@ contract SeedLocal is Script {
         }
 
         vm.startBroadcast(deployerPrivateKey);
-        secondaryToken = address(new MockERC20());
+        secondaryToken = address(new MockERC20("USDTVault", "USDTV", 18));
         vm.stopBroadcast();
+    }
+
+    function _loadOrDeployUsdcToken(uint256 deployerPrivateKey) internal returns (address usdcToken) {
+        if (vm.exists("deployments/anvil-seed.json")) {
+            string memory seedJson = vm.readFile("deployments/anvil-seed.json");
+            if (_stringContains(seedJson, "\"usdcToken\"")) {
+                usdcToken = abi.decode(vm.parseJson(seedJson, ".usdcToken"), (address));
+
+                if (usdcToken != address(0) && usdcToken.code.length > 0) {
+                    return usdcToken;
+                }
+            }
+        }
+
+        vm.startBroadcast(deployerPrivateKey);
+        usdcToken = address(new MockERC20("USDCTreasury", "USDC", 18));
+        vm.stopBroadcast();
+    }
+
+    function _stringContains(string memory haystack, string memory needle) internal pure returns (bool) {
+        bytes memory haystackBytes = bytes(haystack);
+        bytes memory needleBytes = bytes(needle);
+
+        if (needleBytes.length == 0 || haystackBytes.length < needleBytes.length) {
+            return false;
+        }
+
+        for (uint256 i = 0; i <= haystackBytes.length - needleBytes.length; i++) {
+            bool match_ = true;
+            for (uint256 j = 0; j < needleBytes.length; j++) {
+                if (haystackBytes[i + j] != needleBytes[j]) {
+                    match_ = false;
+                    break;
+                }
+            }
+
+            if (match_) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     function _configureAdditionalAssets(
         uint256 adminWalletPrivateKey,
         Contracts memory contracts,
-        address secondaryToken
+        address secondaryToken,
+        address usdcToken
     ) internal {
         // The second token is enabled everywhere it must be usable in local UX:
         // ProtocolCore genesis tokens, ProtocolCore vault assets and GenesisBonding purchase tokens.
-        address[] memory allowedGenesisTokens = new address[](2);
+        address[] memory allowedGenesisTokens = new address[](3);
         allowedGenesisTokens[0] = contracts.primaryToken;
         allowedGenesisTokens[1] = secondaryToken;
+        allowedGenesisTokens[2] = usdcToken;
 
         vm.startBroadcast(adminWalletPrivateKey);
         ProtocolCore(contracts.protocolCore).setSupportedGenesisTokens(allowedGenesisTokens);
@@ -324,7 +369,8 @@ contract SeedLocal is Script {
         uint256 deployerPrivateKey,
         Contracts memory contracts,
         Participants memory participants,
-        address secondaryToken
+        address secondaryToken,
+        address usdcToken
     ) internal {
         _mintToken(deployerPrivateKey, contracts.primaryToken, participants.guardian1.addr, GUARDIAN_BOND);
         _mintToken(deployerPrivateKey, contracts.primaryToken, participants.guardian2.addr, GUARDIAN_BOND);
@@ -343,6 +389,8 @@ contract SeedLocal is Script {
             participants.investor2.addr,
             INVESTOR2_SECONDARY_GVT_BUY + INVESTOR2_SECONDARY_DEPOSIT
         );
+        // Seed treasury with the extra mock USDC token so the UI can show a non-linked DAO asset balance.
+        _mintToken(deployerPrivateKey, usdcToken, contracts.treasury, 50e18);
     }
 
     // Activate all guardians that should exist in the local environment.
@@ -1037,7 +1085,8 @@ contract SeedLocal is Script {
         Participants memory participants,
         VaultSeeds memory vaultSeeds,
         ProposalSeeds memory proposalSeeds,
-        address secondaryToken
+        address secondaryToken,
+        address usdcToken
     ) internal view {
         // These checks are the seed's contract-level acceptance tests.
         ProtocolCore core = ProtocolCore(contracts.protocolCore);
@@ -1047,6 +1096,7 @@ contract SeedLocal is Script {
 
         require(core.hasGenesisToken(contracts.primaryToken), "Primary token not registered as genesis token");
         require(core.hasGenesisToken(secondaryToken), "Secondary token not registered as genesis token");
+        require(core.hasGenesisToken(usdcToken), "USDC token not registered as genesis token");
         require(core.isVaultAssetSupported(contracts.primaryToken), "Primary token not supported as vault asset");
         require(core.isVaultAssetSupported(secondaryToken), "Secondary token not supported as vault asset");
 
@@ -1109,7 +1159,8 @@ contract SeedLocal is Script {
         Participants memory participants,
         VaultSeeds memory vaultSeeds,
         ProposalSeeds memory proposalSeeds,
-        address secondaryToken
+        address secondaryToken,
+        address usdcToken
     ) internal view {
         DaoGovernor governor = DaoGovernor(payable(contracts.daoGovernor));
 
@@ -1118,6 +1169,7 @@ contract SeedLocal is Script {
         console.log("========================================");
         console.log("Primary Genesis Token:", contracts.primaryToken);
         console.log("Secondary Genesis Token:", secondaryToken);
+        console.log("USDC Token:", usdcToken);
         console.log("Guardian1:", participants.guardian1.addr);
         console.log("Guardian2:", participants.guardian2.addr);
         console.log("Admin Guardian:", participants.adminGuardian.addr);
@@ -1152,7 +1204,8 @@ contract SeedLocal is Script {
         Contracts memory contracts,
         Participants memory participants,
         ProposalSeeds memory proposalSeeds,
-        address secondaryToken
+        address secondaryToken,
+        address usdcToken
     ) internal {
         // The persisted JSON is intentionally local-only; on real networks those admin actions should be manual/governed.
         if (block.chainid != 31337) {
@@ -1188,6 +1241,9 @@ contract SeedLocal is Script {
                 '",',
                 '"secondaryGenesisToken":"',
                 vm.toString(secondaryToken),
+                '",',
+                '"usdcToken":"',
+                vm.toString(usdcToken),
                 '",',
                 '"supportedGenesisTokens":',
                 _addressArrayToJson(supportedGenesisTokens),
