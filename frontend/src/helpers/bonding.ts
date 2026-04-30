@@ -10,7 +10,10 @@ export function calculateEstimatedTokens(amount: string, rate: number): string {
   return result.toFixed(2);
 }
 
-export function parseBondingTokenAmount(amount: string): bigint | null {
+export function parseBondingTokenAmount(
+  amount: string,
+  decimals: number = 18,
+): bigint | null {
   const normalizedAmount = amount.trim();
 
   if (!normalizedAmount) {
@@ -18,7 +21,7 @@ export function parseBondingTokenAmount(amount: string): bigint | null {
   }
 
   try {
-    const parsedAmount = parseUnits(normalizedAmount, 18);
+    const parsedAmount = parseUnits(normalizedAmount, decimals);
     return parsedAmount > 0n ? parsedAmount : null;
   } catch {
     return null;

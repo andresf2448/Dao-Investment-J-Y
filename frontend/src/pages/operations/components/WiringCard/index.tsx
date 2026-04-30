@@ -19,7 +19,6 @@ export function WiringCard({
   onInputChange,
   actionDisabled,
   error,
-  note,
   onAction,
 }: WiringCardProps) {
   return (

@@ -17,7 +17,14 @@ import { useProtocolCapabilities } from "@/hooks/useProtocolCapabilities";
 import type { ProtocolCapabilities } from "@/types/capabilities";
 import { getNetworkName } from "@/utils";
 
-const navigation = [
+type NavigationItem = {
+  name: string;
+  href: string;
+  icon: ComponentType<{ className?: string }>;
+  capability?: keyof ProtocolCapabilities;
+};
+
+const navigation: NavigationItem[] = [
   {
     name: "Dashboard",
     href: "/dashboard",
@@ -70,12 +77,7 @@ const navigation = [
     icon: Activity,
     capability: "canAccessAdminConsole",
   },
-] as const satisfies ReadonlyArray<{
-  name: string;
-  href: string;
-  icon: ComponentType<{ className?: string }>;
-  capability?: keyof ProtocolCapabilities;
-}>;
+];
 
 export function MainLayout() {
   const location = useLocation();

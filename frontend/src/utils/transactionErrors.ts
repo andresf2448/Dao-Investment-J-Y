@@ -1,5 +1,3 @@
-import { BaseError } from "viem";
-
 export type TransactionErrorCode =
   | "user_rejected"
   | "insufficient_funds"
@@ -20,28 +18,93 @@ const FALLBACK_TRANSACTION_ERROR: TransactionErrorDisplay = {
   code: "unknown",
 };
 
-function getRawErrorMessages(error: unknown): string[] {
-  if (error instanceof BaseError) {
-    const messages = [
-      error.shortMessage,
-      error.details,
-      error.message,
-    ];
+const ERC20_INSUFFICIENT_BALANCE_SELECTOR = "0xe450d38c";
+const ERC20_INSUFFICIENT_ALLOWANCE_SELECTOR = "0xfb8f41b2";
+const ERC20_INVALID_APPROVER_SELECTOR = "0xe602df05";
+const ERC20_INVALID_SPENDER_SELECTOR = "0x94280d62";
+const ERC20_INVALID_SENDER_SELECTOR = "0x96c6fd1e";
+const ERC20_INVALID_RECEIVER_SELECTOR = "0xec442f05";
 
-    return messages.filter(
-      (message): message is string => Boolean(message && message.trim()),
-    );
+function collectErrorMessages(
+  error: unknown,
+  seen = new WeakSet<object>(),
+): string[] {
+  if (typeof error === "string") {
+    return error.trim().length > 0 ? [error] : [];
   }
 
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return [error.message];
+  if (!error || typeof error !== "object") {
+    return [];
   }
 
-  if (typeof error === "string" && error.trim().length > 0) {
-    return [error];
+  if (seen.has(error)) {
+    return [];
   }
 
-  return [];
+  seen.add(error);
+
+  const messages: string[] = [];
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause) {
+    messages.push(...collectErrorMessages(cause, seen));
+  }
+
+  const candidates = [
+    (error as { shortMessage?: unknown }).shortMessage,
+    (error as { details?: unknown }).details,
+    (error as { message?: unknown }).message,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      messages.push(candidate);
+    }
+  }
+
+  return messages;
+}
+
+function collectErrorNames(
+  error: unknown,
+  seen = new WeakSet<object>(),
+): string[] {
+  if (!error || typeof error !== "object") {
+    return [];
+  }
+
+  if (seen.has(error)) {
+    return [];
+  }
+
+  seen.add(error);
+
+  const names = new Set<string>();
+  const directName = (error as { errorName?: unknown }).errorName;
+
+  if (typeof directName === "string" && directName.trim().length > 0) {
+    names.add(directName.trim());
+  }
+
+  const directReason = (error as { reason?: unknown }).reason;
+  if (typeof directReason === "string" && directReason.trim().length > 0) {
+    names.add(directReason.trim());
+  }
+
+  const nestedData = (error as { data?: unknown }).data;
+  if (nestedData && typeof nestedData === "object") {
+    for (const name of collectErrorNames(nestedData, seen)) {
+      names.add(name);
+    }
+  }
+
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause) {
+    for (const name of collectErrorNames(cause, seen)) {
+      names.add(name);
+    }
+  }
+
+  return [...names];
 }
 
 function normalizeMessage(message: string): string {
@@ -62,12 +125,246 @@ function getTechnicalDetails(error: unknown, rawMessages: string[]): string | un
   return undefined;
 }
 
+function isSimulationError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { phase?: unknown }).phase === "simulation"
+  );
+}
+
 function hasAnyPattern(message: string, patterns: readonly string[]): boolean {
   return patterns.some((pattern) => message.includes(pattern));
 }
 
-function matchProtocolRevert(rawMessages: string[]): TransactionErrorDisplay | undefined {
+function extractCustomErrorSelectors(rawMessages: string[]): string[] {
+  const selectors = new Set<string>();
+
+  for (const message of rawMessages) {
+    const matches = message.match(/0x[a-f0-9]{8}/gi);
+
+    if (!matches) {
+      continue;
+    }
+
+    for (const match of matches) {
+      selectors.add(match.toLowerCase());
+    }
+  }
+
+  return [...selectors];
+}
+
+function matchKnownCustomErrors(
+  rawMessages: string[],
+): TransactionErrorDisplay | undefined {
+  const selectors = extractCustomErrorSelectors(rawMessages);
+
+  if (selectors.includes(ERC20_INSUFFICIENT_BALANCE_SELECTOR)) {
+    return {
+      title: "Insufficient token balance",
+      message:
+        "Your wallet does not hold enough of the selected token to complete this transaction. Reduce the amount or add more tokens, then try again.",
+      code: "insufficient_funds",
+    };
+  }
+
+  if (selectors.includes(ERC20_INSUFFICIENT_ALLOWANCE_SELECTOR)) {
+    return {
+      title: "Approval required",
+      message:
+        "The approved allowance is too low for this transaction. Approve the required amount and try again.",
+      code: "contract_revert",
+    };
+  }
+
+  if (selectors.includes(ERC20_INVALID_APPROVER_SELECTOR)) {
+    return {
+      title: "Invalid approval address",
+      message:
+        "The wallet that is trying to approve the token is not valid for this contract interaction.",
+      code: "contract_revert",
+    };
+  }
+
+  if (selectors.includes(ERC20_INVALID_SPENDER_SELECTOR)) {
+    return {
+      title: "Invalid spender address",
+      message:
+        "The spender address used in the approval is not valid for this ERC20 token.",
+      code: "contract_revert",
+    };
+  }
+
+  if (selectors.includes(ERC20_INVALID_SENDER_SELECTOR)) {
+    return {
+      title: "Invalid sender address",
+      message:
+        "The sender address used in the token transfer is not valid.",
+      code: "contract_revert",
+    };
+  }
+
+  if (selectors.includes(ERC20_INVALID_RECEIVER_SELECTOR)) {
+    return {
+      title: "Invalid recipient address",
+      message:
+        "The recipient address used in the token transfer is not valid.",
+      code: "contract_revert",
+    };
+  }
+
+  return undefined;
+}
+
+function matchKnownContractErrorNames(
+  errorNames: string[],
+): TransactionErrorDisplay | undefined {
+  const normalizedNames = errorNames.map(normalizeMessage);
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "genesisbonding__alreadyfinalized",
+        "alreadyfinalized",
+      ]),
+    )
+  ) {
+    return {
+      title: "Bonding closed",
+      message:
+        "Bonding has already been finalized and no longer accepts purchases.",
+      code: "contract_revert",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "genesisbonding__invalidtoken",
+        "invalidtoken",
+      ]),
+    )
+  ) {
+    return {
+      title: "Unsupported token",
+      message:
+        "This token is not supported for bonding on the current network.",
+      code: "contract_revert",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "commonerrors.zeroamount",
+        "zeroamount",
+      ]),
+    )
+  ) {
+    return {
+      title: "Invalid amount",
+      message: "Enter an amount greater than zero before submitting the transaction.",
+      code: "contract_revert",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "commonerrors.zeroaddress",
+        "zeroaddress",
+      ]),
+    )
+  ) {
+    return {
+      title: "Invalid address",
+      message:
+        "One of the required addresses is invalid or missing. Check the token and contract configuration.",
+      code: "contract_revert",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "erc20insufficientallowance",
+        "insufficientallowance",
+      ]),
+    )
+  ) {
+    return {
+      title: "Approval required",
+      message:
+        "The approved allowance is too low for this transaction. Approve the required amount and try again.",
+      code: "contract_revert",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "erc20insufficientbalance",
+        "insufficientbalance",
+      ]),
+    )
+  ) {
+    return {
+      title: "Insufficient token balance",
+      message:
+        "Your wallet does not have enough of the selected token to complete this transaction. Reduce the amount or add more tokens, then try again.",
+      code: "insufficient_funds",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "guardianbondescrow__insufficientbond",
+      ]),
+    )
+  ) {
+    return {
+      title: "Insufficient bond",
+      message:
+        "The guardian bond is below the required amount for this operation.",
+      code: "contract_revert",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "guardianadministrator__alreadyapplied",
+      ]),
+    )
+  ) {
+    return {
+      title: "Application already submitted",
+      message:
+        "You already have a guardian application in progress or an active guardian record.",
+      code: "contract_revert",
+    };
+  }
+
+  return undefined;
+}
+
+function matchProtocolRevert(
+  rawMessages: string[],
+  errorNames: string[],
+): TransactionErrorDisplay | undefined {
   const normalizedMessages = rawMessages.map(normalizeMessage);
+
+  const decodedError = matchKnownContractErrorNames(errorNames);
+  if (decodedError) {
+    return decodedError;
+  }
+
+  const customError = matchKnownCustomErrors(rawMessages);
+  if (customError) {
+    return customError;
+  }
 
   if (
     normalizedMessages.some((message) =>
@@ -123,8 +420,9 @@ function matchProtocolRevert(rawMessages: string[]): TransactionErrorDisplay | u
     )
   ) {
     return {
-      title: "Insufficient funds",
-      message: "Your available token balance is too low to complete this transaction.",
+      title: "Insufficient token balance",
+      message:
+        "Your wallet does not have enough of the selected token to complete this transaction. Reduce the amount or add more tokens, then try again.",
       code: "insufficient_funds",
     };
   }
@@ -177,7 +475,7 @@ function matchProtocolRevert(rawMessages: string[]): TransactionErrorDisplay | u
 }
 
 export function getTransactionError(error: unknown): TransactionErrorDisplay {
-  const rawMessages = getRawErrorMessages(error);
+  const rawMessages = collectErrorMessages(error);
   const normalizedMessages = rawMessages.map(normalizeMessage);
   const technicalDetails = getTechnicalDetails(error, rawMessages);
 
@@ -243,11 +541,22 @@ export function getTransactionError(error: unknown): TransactionErrorDisplay {
     };
   }
 
-  const protocolRevert = matchProtocolRevert(rawMessages);
+  const errorNames = collectErrorNames(error);
+  const protocolRevert = matchProtocolRevert(rawMessages, errorNames);
   if (protocolRevert) {
     return {
       ...protocolRevert,
       technicalDetails,
+    };
+  }
+
+  if (isSimulationError(error)) {
+    return {
+      title: "Transaction rejected",
+      message:
+        "The contract rejected this request. Review the token, amount, and approvals, then try again.",
+      technicalDetails,
+      code: "contract_revert",
     };
   }
 

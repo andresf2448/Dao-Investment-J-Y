@@ -24,7 +24,7 @@ import type { VaultRegistryDetail } from "./shared/contractTypes";
 import useWriteContracts from "./useWriteContracts";
 import { useProtocolReads } from "./useProtocolReads";
 import type { ProtocolReadDefinition } from "./useProtocolReads";
-import useProtocolReadExecutor from "./useProtocolReadExecutor";
+import useContractReadExecutor from "./useContractReadExecutor";
 import { getReadContractResult } from "./shared/contractResults";
 import { resolveProtocolContract } from "./protocolContracts";
 
@@ -62,7 +62,7 @@ export function useVaultDetailModel(
   const chainId = useChainId();
   const capabilities = useProtocolCapabilities();
   const connection = useConnection();
-  const { executeRead } = useProtocolReadExecutor();
+  const { executeRead } = useContractReadExecutor();
   const { executeWrite } = useWriteContracts();
   const [isSubmitting, setIsSubmitting] = useState(false);
 

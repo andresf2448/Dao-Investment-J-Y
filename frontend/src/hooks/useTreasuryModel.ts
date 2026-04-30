@@ -8,6 +8,7 @@ import type {
   TreasuryMetrics,
   TreasuryModel,
 } from "@/types/treasury";
+import type { AssetCategory, AssetVisibility } from "@/types/treasury";
 import { useProtocolCapabilities } from "./useProtocolCapabilities";
 import { getReadContractResult } from "./shared/contractResults";
 import { resolveOptionalContract } from "./shared/resolveContract";
@@ -82,13 +83,15 @@ export function useTreasuryModel(): TreasuryModel {
     const erc20Assets = knownAssets.map((asset, index) => {
       const rawBalance = getReadContractResult<bigint>(treasuryBalancesData?.[index]) ?? 0n;
       const isDaoAsset = supportedGenesisTokens.includes(asset.address);
+      const category: AssetCategory = isDaoAsset ? "DAO Asset" : "Non-DAO Asset";
+      const visibility: AssetVisibility = treasuryConfig ? "Tracked" : "Unavailable";
 
       return {
         token: asset.symbol,
         type: "ERC20" as const,
         balance: formatTokenAmount(rawBalance, asset.symbol, asset.decimals),
-        category: isDaoAsset ? "DAO Asset" : "Non-DAO Asset",
-        visibility: treasuryConfig ? "Tracked" : "Unavailable",
+        category,
+        visibility,
       };
     });
 

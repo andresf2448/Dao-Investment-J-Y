@@ -62,7 +62,10 @@ export function useProposalComposerModel(): ProposalComposerModel {
     },
   });
 
-  const { data: votingPowerData } = useReadContracts({
+  const {
+    data: votingPowerData,
+    refetch: refetchVotingPower,
+  } = useReadContracts({
     allowFailure: true,
     contracts:
       governanceTokenConfig && connection.address
@@ -169,6 +172,8 @@ export function useProposalComposerModel(): ProposalComposerModel {
       if (response?.receipt?.status !== "success") {
         throw new Error("Vote delegation failed.");
       }
+
+      await refetchVotingPower();
 
       setDelegateAddress("");
       Swal.close();

@@ -5,7 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 import {MockERC20} from "../../test/mocks/MockERC20.sol";
 import {MockAavePool} from "../../test/mocks/MockAavePool.sol";
-import {MockV3Aggregator} from "../../test/mocks/MockV3Aggregator.sol";
+import {MockV3Aggregator} from "../../lib/chainlink-brownie-contracts/contracts/src/v0.8/tests/MockV3Aggregator.sol";
 
 contract DeployMocks is Script {
   function run() external returns (address mockERC20, address mockAavePool, address mockV3Aggregator) {

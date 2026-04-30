@@ -9,6 +9,8 @@ export default function BondingPage() {
     amount,
     setAmount,
     amountError,
+    selectedAssetBalance,
+    selectedAssetBalanceError,
     canBuy,
     isSubmitting,
     estimatedTokens,
@@ -93,6 +95,16 @@ export default function BondingPage() {
               />
               {amountError ? (
                 <p className="mt-2 text-sm text-danger">{amountError}</p>
+              ) : null}
+              {selectedAssetBalance ? (
+                <p className="mt-2 text-sm text-text-secondary">
+                  Available balance: {selectedAssetBalance}
+                </p>
+              ) : null}
+              {selectedAssetBalanceError ? (
+                <p className="mt-2 text-sm text-danger">
+                  {selectedAssetBalanceError}
+                </p>
               ) : null}
             </div>
 

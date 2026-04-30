@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { isAddress, type Address } from "viem";
-import { useChainId, useConnection } from "wagmi";
+import { useChainId, useConnection, useReadContracts } from "wagmi";
 import Swal from "sweetalert2";
 import { getGenesisBondingContract } from "@dao/contracts-sdk";
 
@@ -17,14 +17,37 @@ import type {
 } from "@/types/models/bonding";
 import {
   abiERC20,
+  formatAddress,
   formatTokenAmount,
-  getContractNameByNetwork,
   getTransactionError,
 } from "@/utils";
 import useWriteContracts from "./useWriteContracts";
 import { useProtocolReads } from "./useProtocolReads";
 import { useProtocolCapabilities } from "./useProtocolCapabilities";
+import { getReadContractResult } from "./shared/contractResults";
 import { resolveOptionalContract } from "./shared/resolveContract";
+
+const DEFAULT_TOKEN_DECIMALS = 18;
+
+function normalizeTokenDecimals(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
 
 export function useBondingModel(): BondingModel {
   const chainId = useChainId();
@@ -53,7 +76,6 @@ export function useBondingModel(): BondingModel {
     governanceTokenWalletBalance,
     refetch,
   } = useProtocolReads(bondingProtocolReadDefinitions, bondingReadContext);
-console.log("===============", assetsSupported);
 
   const [selectedAssetAddress, setSelectedAssetAddress] =
     useState<Address | null>(null);
@@ -69,14 +91,58 @@ console.log("===============", assetsSupported);
       ? "Enter a numeric amount greater than 0."
       : undefined;
 
-  const assets = useMemo<BondingAsset[]>(() => {
-    const supportedAssets = (assetsSupported as Address[] | undefined) ?? [];
+  const supportedAssets = useMemo<Address[]>(() => {
+    const contractAssets = (assetsSupported as Address[] | undefined) ?? [];
 
-    return supportedAssets.map((assetAddress) => ({
-      symbol: getContractNameByNetwork(chainId, assetAddress),
-      address: assetAddress,
-    }));
-  }, [assetsSupported, chainId]);
+    return contractAssets.filter(
+      (assetAddress): assetAddress is Address => Boolean(assetAddress),
+    );
+  }, [assetsSupported]);
+
+  const assetMetadataContracts = useMemo(
+    () =>
+      supportedAssets.flatMap((assetAddress) => [
+        {
+          abi: abiERC20,
+          address: assetAddress,
+          functionName: "symbol" as const,
+        },
+        {
+          abi: abiERC20,
+          address: assetAddress,
+          functionName: "decimals" as const,
+        },
+      ]),
+    [supportedAssets],
+  );
+
+  const { data: assetMetadataData } = useReadContracts({
+    allowFailure: true,
+    contracts: assetMetadataContracts,
+    query: {
+      enabled: assetMetadataContracts.length > 0,
+    },
+  });
+
+  const assets = useMemo<BondingAsset[]>(() => {
+    return supportedAssets.map((assetAddress, index) => {
+      const symbolResult = getReadContractResult<string>(
+        assetMetadataData?.[index * 2],
+      );
+      const decimalsResult = getReadContractResult<
+        number | bigint | string
+      >(assetMetadataData?.[index * 2 + 1]);
+
+      const decimals =
+        normalizeTokenDecimals(decimalsResult) ?? DEFAULT_TOKEN_DECIMALS;
+
+      return {
+        symbol: symbolResult?.trim() || formatAddress(assetAddress),
+        address: assetAddress,
+        decimals,
+      };
+    });
+  }, [assetMetadataData, supportedAssets]);
 
   const selectedAsset = useMemo<BondingAsset | null>(() => {
     if (assets.length === 0) {
@@ -92,6 +158,38 @@ console.log("===============", assetsSupported);
       assets[0]
     );
   }, [assets, selectedAssetAddress]);
+
+  const { data: selectedAssetBalanceData } = useReadContracts({
+    allowFailure: true,
+    contracts:
+      selectedAsset && connection.address
+        ? [
+            {
+              abi: abiERC20,
+              address: selectedAsset.address,
+              functionName: "balanceOf" as const,
+              args: [connection.address as Address],
+            },
+          ]
+        : [],
+    query: {
+      enabled: Boolean(selectedAsset && connection.address),
+    },
+  });
+
+  const selectedAssetBalanceValue =
+    getReadContractResult<bigint>(selectedAssetBalanceData?.[0]);
+
+  const parsedAmount = useMemo(() => {
+    return parseBondingTokenAmount(amount, selectedAsset?.decimals ?? 18);
+  }, [amount, selectedAsset?.decimals]);
+
+  const selectedAssetBalanceError =
+    parsedAmount !== null &&
+    typeof selectedAssetBalanceValue === "bigint" &&
+    parsedAmount > selectedAssetBalanceValue
+      ? `Insufficient ${selectedAsset?.symbol ?? "token"} balance.`
+      : undefined;
 
   const state = useMemo<BondingState>(() => {
     const finalized = (isFinalized as boolean) || false;
@@ -121,6 +219,12 @@ console.log("===============", assetsSupported);
     !isSubmitting &&
     !!selectedAsset &&
     isAmountValid;
+
+  const canBuyWithBalance =
+    canBuy &&
+    parsedAmount !== null &&
+    typeof selectedAssetBalanceValue === "bigint" &&
+    !selectedAssetBalanceError;
 
   const canSweep =
     capabilities.canSweepBondingTokens &&
@@ -160,9 +264,7 @@ console.log("===============", assetsSupported);
   };
 
   const createTransaction = async () => {
-    if (!selectedAsset || !bondingConfig || !canBuy) return;
-
-    const parsedAmount = parseBondingTokenAmount(amount);
+    if (!selectedAsset || !bondingConfig || !canBuyWithBalance) return;
 
     if (!parsedAmount) {
       Swal.fire({
@@ -170,6 +272,30 @@ console.log("===============", assetsSupported);
         text: "Invalid amount",
         icon: "error",
         confirmButtonText: "Cool",
+      });
+      return;
+    }
+
+    if (selectedAssetBalanceValue === undefined) {
+      Swal.fire({
+        title: "Balance unavailable",
+        text: "We could not verify your token balance right now. Please try again in a moment.",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+
+    if (parsedAmount > selectedAssetBalanceValue) {
+      Swal.fire({
+        title: "Insufficient balance",
+        text: `You need more ${selectedAsset.symbol} to complete this purchase. Available: ${formatTokenAmount(
+          selectedAssetBalanceValue,
+          selectedAsset.symbol,
+          selectedAsset.decimals,
+        )}.`,
+        icon: "error",
+        confirmButtonText: "OK",
       });
       return;
     }
@@ -335,13 +461,22 @@ console.log("===============", assetsSupported);
     setAmount,
     isAmountValid,
     amountError,
-    canBuy,
+    canBuy: canBuyWithBalance,
     isSubmitting,
     estimatedTokens,
     state,
     position,
     capabilities,
     createTransaction,
+    selectedAssetBalance:
+      typeof selectedAssetBalanceValue === "bigint" && selectedAsset
+        ? formatTokenAmount(
+            selectedAssetBalanceValue,
+            selectedAsset.symbol,
+            selectedAsset.decimals,
+          )
+        : undefined,
+    selectedAssetBalanceError,
     sweepToken,
     setSweepToken,
     hasSweepRole: capabilities.canSweepBondingTokens,

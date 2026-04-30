@@ -316,7 +316,7 @@ export function useRiskModel(): RiskModel {
         args: [
           assetAddress.trim() as Address,
           priceFeed.trim() as Address,
-          BigInt(heartbeat),
+          Number(heartbeat),
           stableAsset.trim() === "true",
           Number(depegMinBps),
           Number(depegMaxBps),

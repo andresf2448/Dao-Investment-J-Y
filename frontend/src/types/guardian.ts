@@ -32,7 +32,7 @@ export interface GuardianContractDetail {
 export interface GuardianState {
   status: GuardianStatus;
   requiredStake: string;
-  bondedAmount: GuardianDetail["balance"] | string;
+  bondedAmount: string;
   proposalState: string;
   canOperate: boolean;
 }

@@ -81,9 +81,6 @@ contract StrategyRouter is
     return _allowedAdapters.contains(adapter);
   }
 
-  function allowedAdapters(address adapter) external view returns (bool) {
-    return isAdapterAllowed(adapter);
-  }
 
   function getAllowedAdapters() external view returns (address[] memory) {
     return _allowedAdapters.values();

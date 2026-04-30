@@ -6,6 +6,7 @@ export type BondingStatus = "Active" | "Finalized";
 export interface BondingAsset {
   symbol: string;
   address: Address;
+  decimals: number;
 }
 
 export interface BondingState {
@@ -28,6 +29,8 @@ export interface BondingModel {
   setAmount: (value: string) => void;
   isAmountValid: boolean;
   amountError?: string;
+  selectedAssetBalance?: string;
+  selectedAssetBalanceError?: string;
   canBuy: boolean;
   isSubmitting: boolean;
   estimatedTokens: string;

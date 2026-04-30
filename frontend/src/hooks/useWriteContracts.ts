@@ -1,20 +1,22 @@
 import { useCallback } from "react";
 import type {
-  Abi,
-  Address,
   Hash,
   WaitForTransactionReceiptReturnType,
+  Address,
 } from "viem";
-import { useChainId, useWriteContract } from "wagmi";
+import { useChainId, useConnection, useWriteContract } from "wagmi";
 import { getPublicClient } from "@/lib";
+import { simulateContractCall } from "@/services/contractsService";
 import {
-  type ProtocolContractGetterName,
-  resolveProtocolContract,
-} from "./protocolContracts";
+  type ContractReferenceWithOptionalAddress,
+  resolveContract,
+} from "./shared/resolveContract";
 
 export type ExecuteOptions = {
   waitForReceipt?: boolean;
   confirmations?: number;
+  simulate?: boolean;
+  simulationAccount?: Address;
 };
 
 export type ExecuteResult = {
@@ -22,68 +24,15 @@ export type ExecuteResult = {
   receipt?: WaitForTransactionReceiptReturnType;
 };
 
-export type ExecuteWriteWithProtocolContractParams = {
+export type ExecuteWriteParams = ContractReferenceWithOptionalAddress & {
   functionName: string;
-  functionContract: ProtocolContractGetterName;
   args?: readonly unknown[];
   options?: ExecuteOptions;
 };
-
-export type ExecuteWriteWithCustomContractParams = {
-  functionName: string;
-  abi: Abi;
-  address: Address;
-  args?: readonly unknown[];
-  options?: ExecuteOptions;
-};
-
-export type ExecuteWriteParams =
-  | ExecuteWriteWithProtocolContractParams
-  | ExecuteWriteWithCustomContractParams;
-
-type ResolvedWriteContract = {
-  abi: Abi;
-  address: Address;
-};
-
-function hasProtocolContract(
-  params: ExecuteWriteParams,
-): params is ExecuteWriteWithProtocolContractParams {
-  return "functionContract" in params;
-}
-
-function resolveWriteContract(
-  chainId: number,
-  params: ExecuteWriteParams,
-): ResolvedWriteContract | undefined {
-  if (hasProtocolContract(params)) {
-    const resolvedContract = resolveProtocolContract(
-      chainId,
-      params.functionContract,
-    );
-
-    if (!resolvedContract) {
-      return undefined;
-    }
-
-    return {
-      abi: resolvedContract.abi,
-      address: resolvedContract.address,
-    };
-  }
-
-  if (!params.abi?.length) {
-    return undefined;
-  }
-
-  return {
-    abi: params.abi,
-    address: params.address,
-  };
-}
 
 const useWriteContracts = () => {
   const chainId = useChainId();
+  const connection = useConnection();
   const writeContract = useWriteContract();
 
   const executeWrite = useCallback(
@@ -92,10 +41,33 @@ const useWriteContracts = () => {
         return undefined;
       }
 
-      const resolvedContract = resolveWriteContract(chainId, params);
+      const { options, ...contractParams } = params;
+      const resolvedContract = resolveContract(chainId, contractParams);
 
       if (!resolvedContract) {
         return undefined;
+      }
+
+      const shouldSimulate = options?.simulate ?? true;
+
+      if (shouldSimulate) {
+        const simulationAccount =
+          options?.simulationAccount ?? connection.address;
+
+        try {
+          await simulateContractCall({
+            chainId,
+            ...contractParams,
+            account: simulationAccount,
+          });
+        } catch (error) {
+          console.log("error:", error);
+          
+          throw Object.assign(new Error("Transaction rejected"), {
+            phase: "simulation" as const,
+            cause: error,
+          });
+        }
       }
 
       const hash = await writeContract.mutateAsync({
@@ -105,19 +77,19 @@ const useWriteContracts = () => {
         args: [...(params.args ?? [])],
       });
 
-      if (!params.options?.waitForReceipt) {
+      if (!options?.waitForReceipt) {
         return { hash };
       }
 
       const publicClient = getPublicClient(chainId);
       const receipt = await publicClient.waitForTransactionReceipt({
         hash,
-        confirmations: params.options.confirmations ?? 1,
+        confirmations: options?.confirmations ?? 1,
       });
 
       return { hash, receipt };
     },
-    [chainId, writeContract],
+    [chainId, connection.address, writeContract],
   );
 
   return {

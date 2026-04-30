@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useConnection, useReadContracts } from "wagmi";
-import type { Address } from "viem";
+import type { Abi, Address } from "viem";
 import type {
   MyVaultPositionsModel,
   VaultPositionItem,
@@ -15,6 +15,26 @@ import { getReadContractResult } from "./shared/contractResults";
 import type { VaultRegistryDetail } from "./shared/contractTypes";
 import { formatTokenAmount, formatAddress } from "@/utils";
 import { abiERC20 } from "@/utils";
+
+const balanceOfAbi = [
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const satisfies Abi;
+
+const previewRedeemAbi = [
+  {
+    type: "function",
+    name: "previewRedeem",
+    stateMutability: "view",
+    inputs: [{ name: "shares", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const satisfies Abi;
 
 export function useMyVaultPositionsModel(): MyVaultPositionsModel {
   const chainId = useChainId();
@@ -53,15 +73,7 @@ export function useMyVaultPositionsModel(): MyVaultPositionsModel {
     contracts:
       vaultRegistryConfig && connection.address
         ? vaultAddresses.map((vaultAddress) => ({
-            abi: [
-              {
-                type: "function",
-                name: "balanceOf",
-                stateMutability: "view",
-                inputs: [{ name: "account", type: "address" }],
-                outputs: [{ name: "", type: "uint256" }],
-              },
-            ],
+            abi: balanceOfAbi,
             address: vaultAddress,
             functionName: "balanceOf",
             args: [connection.address as Address],
@@ -152,15 +164,7 @@ export function useMyVaultPositionsModel(): MyVaultPositionsModel {
   const { data: previewRedeemData } = useReadContracts({
     allowFailure: true,
     contracts: vaultsWithBalance.map(({ vaultAddress, balance }) => ({
-      abi: [
-        {
-          type: "function",
-          name: "previewRedeem",
-          stateMutability: "view",
-          inputs: [{ name: "shares", type: "uint256" }],
-          outputs: [{ name: "", type: "uint256" }],
-        },
-      ],
+      abi: previewRedeemAbi,
       address: vaultAddress,
       functionName: "previewRedeem",
       args: [balance],
@@ -195,6 +199,7 @@ export function useMyVaultPositionsModel(): MyVaultPositionsModel {
 
       return {
         vaultAddress,
+        fullAddress: vaultAddress,
         asset: assetSymbol,
         deposited,
         shares,

@@ -3,15 +3,18 @@ import type { Abi, Address } from "viem";
 import { useChainId, useReadContracts } from "wagmi";
 import { getReadResultValue } from "./shared/contractResults";
 import {
-  resolveProtocolContract,
-  type ProtocolContractGetterName,
-} from "./protocolContracts";
+  type ContractReferenceWithOptionalAddress,
+  resolveContract,
+} from "./shared/resolveContract";
+import { type ProtocolContractGetterName } from "./protocolContracts";
 
 type ProtocolReadArgs<TContext> =
   | readonly unknown[]
   | ((context: TContext) => readonly unknown[] | undefined);
 
-type ProtocolContractSpec = ProtocolContractGetterName | { abi: Abi; address: Address } | { functionContract: ProtocolContractGetterName; address: Address };
+type ProtocolContractSpec =
+  | ProtocolContractGetterName
+  | ContractReferenceWithOptionalAddress;
 
 export type ProtocolReadDefinition<
   TKey extends string = string,
@@ -103,18 +106,12 @@ export function useProtocolReads<TKey extends string, TContext = void>(
 
     const resolvedContracts = resolvedDefinitions
       .map((definition) => {
-        let contract: { abi: Abi; address: Address } | undefined;
-
-        if (typeof definition.contract === 'string') {
-          contract = resolveProtocolContract(chainId, definition.contract);
-        } else if ('functionContract' in definition.contract) {
-          const resolved = resolveProtocolContract(chainId, definition.contract.functionContract);
-          if (resolved) {
-            contract = { ...resolved, address: definition.contract.address };
-          }
-        } else {
-          contract = definition.contract;
-        }
+        const contract =
+          typeof definition.contract === "string"
+            ? resolveContract(chainId, {
+                functionContract: definition.contract,
+              })
+            : resolveContract(chainId, definition.contract);
 
         if (!contract || !contract.address) {
           return undefined;
