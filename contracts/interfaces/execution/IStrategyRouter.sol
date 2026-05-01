@@ -6,14 +6,22 @@ interface IStrategyRouter {
     address adapter,
     address vault,
     address asset,
-    bytes calldata data
+    uint256 amountToInvest,
+    uint8 action
   ) external;
 
   function executeMultiple(
     address vault,
     address asset,
     address[] calldata adapters,
-    uint256[] calldata percentages
+    uint256[] calldata amountsToInvest,
+    uint8 action
+  ) external;
+
+  function divestMultiple(
+    address vault,
+    address asset,
+    address[] calldata adapters
   ) external;
 
   function isAdapterAllowed(address adapter) external view returns (bool);

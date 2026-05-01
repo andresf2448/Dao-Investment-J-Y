@@ -39,14 +39,12 @@ contract AaveV3Adapter is IStrategyAdapter {
     pool = IAaveV3Pool(pool_);
   }
 
-  function execute(address vault, bytes calldata data)
+  function execute(address vault, uint8 actionRaw, uint256 amount)
     external
     override
     onlyRouter
   {
     address asset = IERC4626(vault).asset();
-
-    (uint8 actionRaw, uint256 amount) = abi.decode(data, (uint8, uint256));
 
     if(amount == 0) revert CommonErrors.ZeroAmount();
     if(actionRaw > uint8(Action.Withdraw))

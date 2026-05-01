@@ -18,7 +18,7 @@ contract DeployMocks is Script {
       MockERC20 mockERC20Instance = new MockERC20("USDTGenesis", "USDTG", 18);
       MockERC20 unlinkedTestToken = new MockERC20("StandaloneTestToken", "STAND", 18);
       MockAavePool mockAavePoolInstance = new MockAavePool();
-      MockV3Aggregator mockV3AggregatorInstance = new MockV3Aggregator(8, 2000e8);
+      MockV3Aggregator mockV3AggregatorInstance = new MockV3Aggregator(8, 1e8);
     vm.stopBroadcast();
 
     console.log("USDTGenesis deployed at:", address(mockERC20Instance));

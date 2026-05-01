@@ -102,7 +102,8 @@ contract StrategyRouter is
     address adapter,
     address vault,
     address asset,
-    bytes calldata data
+    uint256 amountToInvest,
+    uint8 action
   ) external override {
     if(vault != msg.sender)
       revert CommonErrors.Unauthorized();
@@ -116,8 +117,8 @@ contract StrategyRouter is
     if(riskManager == address(0))
       revert CommonErrors.ZeroAddress();
 
-    IRiskManager(riskManager).validateExecution(vault, asset, adapter, data);
-    IStrategyAdapter(adapter).execute(vault, data);
+    IRiskManager(riskManager).validateExecution(asset);
+    IStrategyAdapter(adapter).execute(vault, action, amountToInvest);
 
     address[] memory adapters = new address[](1);
     adapters[0] = adapter;
@@ -127,13 +128,33 @@ contract StrategyRouter is
     emit StrategyExecuted(vault, adapters, asset, percentages);
   }
 
+  function divestMultiple(
+    address vault,
+    address asset,
+    address[] calldata adapters
+  ) external override {
+    uint256 adaptersLength = adapters.length;
+    if(vault != msg.sender)
+      revert CommonErrors.Unauthorized();
+
+    for(uint256 i = 0; i < adaptersLength; i++) {
+      if(adapters[i] == address(0))
+        revert CommonErrors.ZeroAddress();
+
+      IStrategyAdapter(adapters[i]).execute(vault, 1, type(uint256).max);
+    }
+
+    emit StrategyExecuted(vault, adapters, asset, new uint256[](adapters.length));
+  }
+
   function executeMultiple(
     address vault,
     address asset,
     address[] calldata adapters,
-    uint256[] calldata percentages
+    uint256[] calldata amountsToInvest,
+    uint8 action
   ) external override {
-    if(adapters.length != percentages.length)
+    if(adapters.length != amountsToInvest.length)
       revert StrategyRouter__InvalidAllocation();
 
     if(vault == address(0))
@@ -145,7 +166,6 @@ contract StrategyRouter is
     if(riskManager == address(0))
       revert CommonErrors.ZeroAddress();
 
-    uint256 totalPercentage = 0;
     for(uint256 i = 0; i < adapters.length; i++) {
       if(adapters[i] == address(0))
         revert CommonErrors.ZeroAddress();
@@ -157,24 +177,15 @@ contract StrategyRouter is
         if(adapters[j] == adapters[i])
           revert StrategyRouter__InvalidAllocation();
       }
-
-      totalPercentage += percentages[i];
     }
 
-    if(totalPercentage != 100)
-      revert StrategyRouter__InvalidAllocation();
+    IRiskManager(riskManager).validateExecution(asset);
 
-    // Encode data with adapter percentages for risk manager validation
-    bytes memory allocationData = abi.encode(adapters, percentages);
-    IRiskManager(riskManager).validateExecution(vault, asset, adapters[0], allocationData);
-
-    // Execute each adapter with their respective percentage
     for(uint256 i = 0; i < adapters.length; i++) {
-      bytes memory adapterData = abi.encode(percentages[i]);
-      IStrategyAdapter(adapters[i]).execute(vault, adapterData);
+      IStrategyAdapter(adapters[i]).execute(vault, action, amountsToInvest[i]);
     }
 
-    emit StrategyExecuted(vault, adapters, asset, percentages);
+    emit StrategyExecuted(vault, adapters, asset, amountsToInvest);
   }
 
   function _authorizeUpgrade(

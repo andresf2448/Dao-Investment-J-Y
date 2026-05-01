@@ -135,10 +135,7 @@ contract RiskManager is
   }
 
   function validateExecution(
-    address,
-    address asset,
-    address,
-    bytes calldata
+    address asset
   ) external view override {
     if(executionPaused) revert RiskManager__ExecutionPaused();
 

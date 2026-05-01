@@ -83,6 +83,7 @@ contract VaultImplementation is
   error VaultImplementation__ExternalCallFailed();
   error VaultImplementation__InvalidStrategyAllocation();
   error VaultImplementation__duplicatedAdapter();
+  error VaultImplementation__InvalidPercentage();
 
   constructor() {
     _disableInitializers();
@@ -217,9 +218,21 @@ contract VaultImplementation is
     return super.redeem(shares, receiver, owner);
   }
 
+  function divestStrategy() external onlyRole(GUARDIAN_ROLE) whenNotPaused {
+    if (_vaultActiveAdapters.length() == 0)
+      revert VaultImplementation__InvalidStrategyAllocation();
+
+    IStrategyRouter(router).divestMultiple(
+      address(this),
+      asset(),
+      _vaultActiveAdapters.values()
+    );
+  }
+
   function executeStrategy(
     address[] calldata newAdapters,
-    uint256[] calldata newPercentages
+    uint256[] calldata newPercentages,
+    uint8 action
   ) external onlyRole(GUARDIAN_ROLE) whenNotPaused {
     uint256 adaptersLength = newAdapters.length;
 
@@ -238,6 +251,8 @@ contract VaultImplementation is
       }
     }
 
+    uint256 totalPercentage = 0;
+
     for(uint256 i = 0; i < adaptersLength; i++) {
       address adapter = newAdapters[i];
       uint256 percentage = newPercentages[i];
@@ -254,15 +269,29 @@ contract VaultImplementation is
         revert VaultImplementation__duplicatedAdapter();
 
       _vaultActiveAdapters.add(adapter);
+      _giveAdapterRole(adapter);
+
+      totalPercentage += newPercentages[i];
     }
 
+    if(totalPercentage != 100)
+      revert VaultImplementation__InvalidPercentage();
+
     emit StrategyExecutionRequest(msg.sender, newAdapters, newPercentages);
+
+    uint256 totalAssets = totalAssets();
+    uint256[] memory amountsToInvest = new uint256[](adaptersLength);
+
+    for(uint256 i = 0; i < adaptersLength; i++) {
+      amountsToInvest[i] = (totalAssets * newPercentages[i]) / 100;
+    }
 
     IStrategyRouter(router).executeMultiple(
       address(this),
       asset(),
       newAdapters,
-      newPercentages
+      amountsToInvest,
+      action
     );
   }
 
@@ -314,5 +343,12 @@ contract VaultImplementation is
     returns(bool)
   {
     return super.supportsInterface(interfaceId);
+  }
+
+  function _giveAdapterRole(address adapter) internal {
+    if(adapter == address(0))
+      revert CommonErrors.ZeroAddress();
+
+    _grantRole(STRATEGY_EXECUTOR_ROLE, adapter);
   }
 }
