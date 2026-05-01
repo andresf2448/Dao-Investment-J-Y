@@ -7,7 +7,6 @@ import {ERC4626Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC2
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-// import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {IProtocolCore} from "../../interfaces/core/IProtocolCore.sol";
@@ -15,6 +14,8 @@ import {IStrategyRouter} from "../../interfaces/execution/IStrategyRouter.sol";
 import {IVaultStrategyExecutor} from "../../interfaces/vaults/IVaultStrategyExecutor.sol";
 import {CommonErrors} from "../../libraries/errors/CommonErrors.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {IMockAavePool} from "../../../test/interfaces/IMockAavePool.sol";
+import {IStrategyAdapter} from "../../interfaces/adapters/IStrategyAdapter.sol";
 
 contract VaultImplementation is
   Initializable,
@@ -222,10 +223,20 @@ contract VaultImplementation is
     if (_vaultActiveAdapters.length() == 0)
       revert VaultImplementation__InvalidStrategyAllocation();
 
+    uint256 adaptersLength = _vaultActiveAdapters.length();
+    uint256[] memory balancesAdapters = new uint256[](_vaultActiveAdapters.length());
+
+    for(uint256 i = 0; i < adaptersLength; i++) {
+      address adapter = _vaultActiveAdapters.at(i);
+      address poolAdapter = IStrategyAdapter(adapter).poolAddress();
+
+      balancesAdapters[i] = IMockAavePool(poolAdapter).deposits(address(this), asset());
+    }
+  
     IStrategyRouter(router).divestMultiple(
       address(this),
-      asset(),
-      _vaultActiveAdapters.values()
+      _vaultActiveAdapters.values(),
+      balancesAdapters
     );
   }
 

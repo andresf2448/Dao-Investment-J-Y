@@ -21,6 +21,7 @@ contract StrategyRouter is
 
   bytes32 public constant ADAPTER_MANAGER_ROLE = keccak256("ADAPTER_MANAGER_ROLE");
   IVaultRegistry public vaultRegistry;
+  uint8 public constant DIVEST_ACTION = 1;
 
   EnumerableSet.AddressSet private _allowedAdapters;
   address public riskManager;
@@ -32,6 +33,11 @@ contract StrategyRouter is
     address[] adapters,
     address indexed asset,
     uint256[] percentages
+  );
+  event DivestStrategy(
+    address indexed vault,
+    address[] adapters,
+    uint256[] amountsToDivest
   );
 
   error StrategyRouter__AdapterNotAllowed();
@@ -130,21 +136,22 @@ contract StrategyRouter is
 
   function divestMultiple(
     address vault,
-    address asset,
-    address[] calldata adapters
+    address[] calldata adapters,
+    uint256[] calldata amountsToDivest
   ) external override {
-    uint256 adaptersLength = adapters.length;
     if(vault != msg.sender)
       revert CommonErrors.Unauthorized();
+
+    uint256 adaptersLength = adapters.length;
 
     for(uint256 i = 0; i < adaptersLength; i++) {
       if(adapters[i] == address(0))
         revert CommonErrors.ZeroAddress();
 
-      IStrategyAdapter(adapters[i]).execute(vault, 1, type(uint256).max);
+      IStrategyAdapter(adapters[i]).execute(vault, DIVEST_ACTION, amountsToDivest[i]);
     }
 
-    emit StrategyExecuted(vault, adapters, asset, new uint256[](adapters.length));
+    emit DivestStrategy(vault, adapters, amountsToDivest);
   }
 
   function executeMultiple(
@@ -154,6 +161,9 @@ contract StrategyRouter is
     uint256[] calldata amountsToInvest,
     uint8 action
   ) external override {
+    if(vault != msg.sender)
+      revert CommonErrors.Unauthorized();
+
     if(adapters.length != amountsToInvest.length)
       revert StrategyRouter__InvalidAllocation();
 

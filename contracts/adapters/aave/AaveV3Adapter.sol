@@ -13,7 +13,7 @@ contract AaveV3Adapter is IStrategyAdapter {
     Withdraw
   }
 
-  IAaveV3Pool public immutable pool;
+  IAaveV3Pool private immutable pool;
   address public immutable router;
 
   event Executed(
@@ -47,6 +47,7 @@ contract AaveV3Adapter is IStrategyAdapter {
     address asset = IERC4626(vault).asset();
 
     if(amount == 0) revert CommonErrors.ZeroAmount();
+
     if(actionRaw > uint8(Action.Withdraw))
       revert AaveV3Adapter__InvalidAction();
 
@@ -76,6 +77,10 @@ contract AaveV3Adapter is IStrategyAdapter {
         (asset, amount, vault, 0)
       )
     );
+  }
+
+  function poolAddress() external view override returns (address) {
+    return address(pool);
   }
 
   function _withdraw(

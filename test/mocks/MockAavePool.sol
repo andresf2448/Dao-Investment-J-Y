@@ -30,12 +30,8 @@ contract MockAavePool {
     uint256 amount,
     address to
   ) external returns (uint256) {
-    if(amount == type(uint256).max) {
-      amount = deposits[msg.sender][asset];
-    } else {
-      uint256 userBalance = deposits[msg.sender][asset];
-      require(userBalance >= amount, "insufficient balance");
-    }
+    uint256 userBalance = deposits[msg.sender][asset];
+    require(userBalance >= amount, "insufficient balance");
 
     deposits[msg.sender][asset] -= amount;
 
