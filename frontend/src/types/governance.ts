@@ -60,6 +60,7 @@ export interface GovernanceMetrics {
 }
 
 export interface GovernanceUserState {
+  votingPowerValue: bigint;
   votingPower: string;
   governanceTokenBalance: string;
   meetsProposalThreshold: boolean;

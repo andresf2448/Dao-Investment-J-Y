@@ -94,6 +94,12 @@ export function useProposalDetailModel(
               functionName: "proposalDetails" as const,
               args: [parsedProposalId],
             },
+            {
+              abi: governorConfig.abi,
+              address: governorConfig.address,
+              functionName: "proposalEta" as const,
+              args: [parsedProposalId],
+            },
           ]
         : [],
     query: {
@@ -119,6 +125,26 @@ export function useProposalDetailModel(
     },
   });
 
+  const { data: userVoteStatusData } = useReadContracts({
+    allowFailure: true,
+    contracts:
+      governorConfig && parsedProposalId !== undefined && connection.address
+        ? [
+            {
+              abi: governorConfig.abi,
+              address: governorConfig.address,
+              functionName: "hasVoted" as const,
+              args: [parsedProposalId, connection.address],
+            },
+          ]
+        : [],
+    query: {
+      enabled: Boolean(
+        governorConfig && parsedProposalId !== undefined && connection.address,
+      ),
+    },
+  });
+
   const proposalState = mapGovernorProposalState(
     getReadContractResult<number | bigint>(proposalData?.[0]),
   );
@@ -139,6 +165,7 @@ export function useProposalDetailModel(
       `0x${string}`,
     ]
   >(proposalData?.[5]);
+  const proposalEta = getReadContractResult<bigint>(proposalData?.[6]) ?? 0n;
 
   const proposalActions = useMemo(() => {
     const targets = proposalDetails?.[0] ?? [];
@@ -151,6 +178,26 @@ export function useProposalDetailModel(
       calldata: calldatas[index] ?? "0x",
     }));
   }, [proposalDetails]);
+
+  const { data: quorumData } = useReadContracts({
+    allowFailure: true,
+    contracts:
+      governorConfig && proposalSnapshot > 0n
+        ? [
+            {
+              abi: governorConfig.abi,
+              address: governorConfig.address,
+              functionName: "quorum" as const,
+              args: [proposalSnapshot],
+            },
+          ]
+        : [],
+    query: {
+      enabled: Boolean(governorConfig && proposalSnapshot > 0n),
+    },
+  });
+  const quorumRequired =
+    getReadContractResult<bigint>(quorumData?.[0]) ?? 0n;
 
   const proposalMetadata = useMemo(
     () => loadProposalMetadata(chainId, proposalId),
@@ -193,6 +240,11 @@ export function useProposalDetailModel(
       getReadContractResult<bigint>(userVotingPowerData?.[0]) ?? 0n,
       "GOV",
     ),
+    quorumRequired: formatTokenAmount(quorumRequired, "GOV"),
+    quorumVotes: formatTokenAmount(
+      voteBreakdown[1] + voteBreakdown[2],
+      "GOV",
+    ),
     votes: {
       againstVotes: formatTokenAmount(voteBreakdown[0], "GOV"),
       forVotes: formatTokenAmount(voteBreakdown[1], "GOV"),
@@ -223,16 +275,36 @@ export function useProposalDetailModel(
     actions: proposalActions,
   };
 
+  const isVotingWindowOpen =
+    currentBlock != null &&
+    proposalSnapshot > 0n &&
+    proposalDeadline > 0n &&
+    currentBlock > proposalSnapshot &&
+    currentBlock <= proposalDeadline;
+  const hasVoted =
+    getReadContractResult<boolean>(userVoteStatusData?.[0]) ?? false;
+  const voteSucceeded = voteBreakdown[1] > voteBreakdown[0];
+  const quorumReached =
+    quorumRequired > 0n && voteBreakdown[1] + voteBreakdown[2] >= quorumRequired;
+  const isReadyToQueue =
+    currentBlock != null &&
+    proposalDeadline > 0n &&
+    currentBlock > proposalDeadline &&
+    voteSucceeded &&
+    quorumReached &&
+    proposalEta === 0n;
+
   const canVote =
-    proposal.status === "Active" &&
+    (proposal.status === "Active" || isVotingWindowOpen) &&
     parsedProposalId !== undefined &&
+    !hasVoted &&
     !isSubmitting;
   const canExecuteProposal =
     proposal.status === "Queued" &&
     parsedProposalId !== undefined &&
     !isSubmitting;
   const canQueueProposal =
-    proposal.status === "Succeeded" &&
+    (proposal.status === "Succeeded" || isReadyToQueue) &&
     parsedProposalId !== undefined &&
     !isSubmitting;
 
@@ -370,6 +442,7 @@ export function useProposalDetailModel(
     proposal,
     capabilities,
     canVote,
+    hasVoted,
     canQueueProposal,
     canExecuteProposal,
     voteFor: () => confirmVoteAction("Vote For", "for"),

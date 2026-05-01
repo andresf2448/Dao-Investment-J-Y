@@ -6,6 +6,7 @@ import type {
   VaultDetailData,
   VaultDetailModel,
   VaultDetailPosition,
+  VaultStrategyAction,
   VaultStrategyAllocationInput,
 } from "@/types/models/vaultDetail";
 import { useProtocolCapabilities } from "./useProtocolCapabilities";
@@ -30,6 +31,25 @@ import { resolveProtocolContract } from "./protocolContracts";
 
 type VaultDetailProtocolContext = {
   vaultAddress: Address | undefined;
+};
+
+const strategyActionCopy: Record<
+  VaultStrategyAction,
+  {
+    title: string;
+    confirmation: string;
+  }
+> = {
+  0: {
+    title: "Execute investment strategy",
+    confirmation:
+      "Confirm the investment strategy transaction in your wallet. The vault allocation will be routed across the selected adapters.",
+  },
+  1: {
+    title: "Execute Divestment strategy",
+    confirmation:
+      "Confirm the Divestment strategy transaction in your wallet. The vault allocation will be routed across the selected adapters.",
+  },
 };
 
 const vaultDetailProtocolDefinitions: ProtocolReadDefinition<
@@ -73,6 +93,22 @@ export function useVaultDetailModel(
   const [totalAssets, setTotalAssets] = useState<bigint | undefined>();
   const [depositedAssets, setDepositedAssets] = useState<bigint | undefined>();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const toBigIntValue = (value: unknown): bigint => {
+    if (typeof value === "bigint") {
+      return value;
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return BigInt(Math.trunc(value));
+    }
+
+    if (typeof value === "string" && value.trim() !== "") {
+      return BigInt(value);
+    }
+
+    return 0n;
+  };
 
   const resolvedVaultAddress = useMemo(
     () =>
@@ -320,7 +356,7 @@ export function useVaultDetailModel(
           address: resolvedVaultAddress,
         });
         if (!isActive) return;
-        setVaultDecimals(decimals as number);
+        setVaultDecimals(Number(toBigIntValue(decimals)));
 
         const shares = await executeRead({
           functionName: "balanceOf",
@@ -329,7 +365,7 @@ export function useVaultDetailModel(
           address: resolvedVaultAddress,
         });
         if (!isActive) return;
-        setMintedShares(shares as bigint);
+        setMintedShares(toBigIntValue(shares));
 
         const maxW = await executeRead({
           functionName: "maxWithdraw",
@@ -338,7 +374,7 @@ export function useVaultDetailModel(
           address: resolvedVaultAddress,
         });
         if (!isActive) return;
-        setMaxWithdraw(maxW as bigint);
+        setMaxWithdraw(toBigIntValue(maxW));
 
         const maxR = await executeRead({
           functionName: "maxRedeem",
@@ -347,7 +383,7 @@ export function useVaultDetailModel(
           address: resolvedVaultAddress,
         });
         if (!isActive) return;
-        setMaxRedeem(maxR as bigint);
+        setMaxRedeem(toBigIntValue(maxR));
 
         const totalA = await executeRead({
           functionName: "totalAssets",
@@ -356,7 +392,7 @@ export function useVaultDetailModel(
           address: resolvedVaultAddress,
         });
         if (!isActive) return;
-        setTotalAssets(totalA as bigint);
+        setTotalAssets(toBigIntValue(totalA));
       } catch (error) {
         console.error("Error fetching vault data:", error);
       }
@@ -386,7 +422,7 @@ export function useVaultDetailModel(
           address: resolvedVaultAddress,
         });
         if (!isActive) return;
-        setDepositedAssets(deposited as bigint);
+        setDepositedAssets(toBigIntValue(deposited));
       } catch (error) {
         console.error("Error fetching preview data:", error);
       }
@@ -438,7 +474,7 @@ export function useVaultDetailModel(
         args: [],
         address: resolvedVaultAddress,
       });
-      setTotalAssets(totalA as bigint);
+      setTotalAssets(toBigIntValue(totalA));
     } catch (error) {
       console.error("Error refreshing Vault Total Assets:", error);
     }
@@ -653,7 +689,9 @@ export function useVaultDetailModel(
     );
   };
 
-  const executeStrategy = async (): Promise<boolean> => {
+  const executeStrategy = async (
+    action: VaultStrategyAction,
+  ): Promise<boolean> => {
     if (!resolvedVaultAddress || !strategyRouterConfig) {
       await Swal.fire({
         title: "Strategy execution unavailable",
@@ -704,8 +742,8 @@ export function useVaultDetailModel(
     );
 
     return executeVaultTransaction(
-      "Execute strategy",
-      "Confirm the guardian strategy execution in your wallet. The vault allocation will be routed across the selected adapters.",
+      strategyActionCopy[action].title,
+      strategyActionCopy[action].confirmation,
       async () => {
         const contract = resolveProtocolContract(
           chainId,
@@ -716,8 +754,8 @@ export function useVaultDetailModel(
         return executeWrite({
           abi: contract.abi,
           address: resolvedVaultAddress,
-          functionName: "executeStrategy",
-          args: [adapters, percentages],
+          functionName: action === 0 ? "executeStrategy" : "divestStrategy",
+          args: action === 0 ? [adapters, percentages, action] : undefined,
           options: { waitForReceipt: true },
         });
       },

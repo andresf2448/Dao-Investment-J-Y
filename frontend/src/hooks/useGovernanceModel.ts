@@ -227,6 +227,7 @@ export function useGovernanceModel(): GovernanceModel {
   const thresholdValue = typeof proposalThreshold === "bigint" ? proposalThreshold : 0n;
 
   const user: GovernanceUserState = {
+    votingPowerValue: votingPower,
     votingPower: formatTokenAmount(votingPower, "GOV"),
     governanceTokenBalance: formatTokenAmount(governanceTokenBalance, "GOV"),
     meetsProposalThreshold: votingPower >= thresholdValue && thresholdValue > 0n,

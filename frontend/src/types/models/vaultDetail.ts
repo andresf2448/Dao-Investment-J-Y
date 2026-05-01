@@ -29,6 +29,8 @@ export interface VaultStrategyAllocationInput {
   percentage: string;
 }
 
+export type VaultStrategyAction = 0 | 1;
+
 export interface VaultStrategyAllocationStatus {
   adapter: string;
   percentage: string;
@@ -58,5 +60,5 @@ export interface VaultDetailModel {
   mint: (amount: string) => Promise<boolean>;
   withdraw: (amount: string) => Promise<boolean>;
   redeem: (amount: string) => Promise<boolean>;
-  executeStrategy: () => Promise<boolean>;
+  executeStrategy: (action: VaultStrategyAction) => Promise<boolean>;
 }

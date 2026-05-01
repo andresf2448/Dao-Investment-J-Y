@@ -1,21 +1,23 @@
 import { useParams } from "react-router-dom";
 import { Clock3, Vote } from "lucide-react";
 import { useProposalDetailModel } from "@/hooks/useProposalDetailModel";
+import { useGovernanceModel } from "@/hooks/useGovernanceModel";
 import {
   CopyValueButton,
   HeroMetric,
   MetricCard,
-  InfoRow,
 } from "@/components/shared";
 import { TimelineRow } from "../";
 import { truncateMiddle } from "@/utils";
 
 export default function ProposalDetailPage() {
   const { proposalId } = useParams();
+  const { user: governanceUser } = useGovernanceModel();
   const {
     proposal,
     capabilities,
     canVote,
+    hasVoted,
     canQueueProposal,
     canExecuteProposal,
     voteFor,
@@ -25,6 +27,17 @@ export default function ProposalDetailPage() {
     executeProposal,
     isSubmitting,
   } = useProposalDetailModel(proposalId);
+  const hasVotingPower = governanceUser.votingPowerValue > 0n;
+  const canCastVote = canVote && hasVotingPower;
+  const voteEligibilityMessage = hasVotingPower
+    ? "The connected wallet has delegated governance power available for voting."
+    : "The connected wallet needs delegated governance power before vote actions become available.";
+  const voteParticipationMessage = hasVoted
+    ? "This wallet has already voted on this proposal."
+    : undefined;
+  const quorumMessage = canQueueProposal
+    ? "Quorum and vote majority requirements are met. The proposal can be queued now."
+    : "The proposal can be queued once the deadline passes and quorum is reached.";
 
   return (
     <div className="space-y-8">
@@ -92,7 +105,7 @@ export default function ProposalDetailPage() {
         />
       </section>
 
-      <section className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+      <section className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="min-w-0 space-y-6">
           <div className="card">
             <div className="card-header">Proposal Metadata</div>
@@ -218,9 +231,44 @@ export default function ProposalDetailPage() {
               </div>
             </div>
           </div>
+
+          <div className="card">
+            <div className="card-header">Governance Voting Power</div>
+
+            <div className="card-content">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-border bg-white px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-secondary">
+                    Required to vote
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-text-primary">
+                    Delegated voting power greater than 0 GOV
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-white px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-secondary">
+                    Your voting power
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-text-primary">
+                    {governanceUser.votingPower}
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-text-secondary">
+                {voteEligibilityMessage}
+              </p>
+              {voteParticipationMessage ? (
+                <p className="mt-2 text-sm leading-6 text-text-secondary">
+                  {voteParticipationMessage}
+                </p>
+              ) : null}
+            </div>
+          </div>
         </div>
 
-        <div className="min-w-0 space-y-6">
+        <div className="min-w-0 flex h-full flex-col space-y-6">
           <div className="card">
             <div className="card-header">Proposal Timeline</div>
 
@@ -236,71 +284,104 @@ export default function ProposalDetailPage() {
           </div>
 
           <div className="card">
+            <div className="card-header">Quorum Status</div>
+
+            <div className="card-content">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-border bg-white px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-secondary">
+                    Required quorum
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-text-primary">
+                    {proposal.quorumRequired}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-white px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-secondary">
+                    Current quorum
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-text-primary">
+                    {proposal.quorumVotes}
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-text-secondary">
+                {quorumMessage}
+              </p>
+            </div>
+          </div>
+
+          <div className="card">
             <div className="card-header">Proposal Actions</div>
 
-            <div className="card-content space-y-4">
-              <button
-                type="button"
-                className="btn-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={voteFor}
-                disabled={!canVote}
-              >
-                Vote For
-              </button>
+            <div className="card-content space-y-3">
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  className="btn-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={voteFor}
+                  disabled={!canCastVote}
+                >
+                  Vote For
+                </button>
 
-              <button
-                type="button"
-                className="btn-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={voteAgainst}
-                disabled={!canVote}
-              >
-                Vote Against
-              </button>
+                <button
+                  type="button"
+                  className="btn-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={voteAgainst}
+                  disabled={!canCastVote}
+                >
+                  Vote Against
+                </button>
 
-              <button
-                type="button"
-                className="btn-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={abstain}
-                disabled={!canVote}
-              >
-                Abstain
-              </button>
+                <button
+                  type="button"
+                  className="btn-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={abstain}
+                  disabled={!canCastVote}
+                >
+                  Abstain
+                </button>
+                <button
+                  type="button"
+                  className="btn-warning w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={queueProposal}
+                  disabled={!canQueueProposal}
+                >
+                  Queue Proposal
+                </button>
 
-              <button
-                type="button"
-                className="btn-warning w-full disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={queueProposal}
-                disabled={!canQueueProposal}
-              >
-                Queue Proposal
-              </button>
-
-              <button
-                type="button"
-                className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={executeProposal}
-                disabled={!canExecuteProposal}
-              >
-                Execute Proposal
-              </button>
-
-              <div className="rounded-2xl border border-border bg-gray-50 px-4 py-4">
-                <p className="text-sm font-medium text-text-primary">
-                  Interaction Notes
-                </p>
-                <p className="mt-1 text-sm leading-6 text-text-secondary">
-                  Voting, queueing and execution should be enabled only when the
-                  proposal state and user capability model allow the action.
-                </p>
-                <p className="mt-3 text-sm text-text-secondary">
-                  Admin console access:{" "}
-                  <span className="font-medium text-text-primary">
-                    {capabilities.canAccessAdminConsole
-                      ? "Enabled"
-                      : "Restricted"}
-                  </span>
-                </p>
+                <button
+                  type="button"
+                  className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={executeProposal}
+                  disabled={!canExecuteProposal}
+                >
+                  Execute Proposal
+                </button>
               </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">Interaction Notes</div>
+
+            <div className="card-content flex flex-1 flex-col">
+              <p className="text-sm leading-6 text-text-secondary">
+                Voting, queueing and execution should be enabled only when the
+                proposal state and user capability model allow the action.
+              </p>
+              <p className="mt-3 text-sm text-text-secondary">
+                Admin console access:{" "}
+                <span className="font-medium text-text-primary">
+                  {capabilities.canAccessAdminConsole
+                    ? "Enabled"
+                  : "Restricted"}
+                </span>
+              </p>
+              <div className="flex-1" />
             </div>
           </div>
         </div>

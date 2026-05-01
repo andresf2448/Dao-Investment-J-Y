@@ -35,6 +35,8 @@ export interface ProposalDetailData {
   proposer: string;
   executionEta: string;
   delegatedVotes: string;
+  quorumRequired: string;
+  quorumVotes: string;
   votes: ProposalVoteBreakdown;
   timeline: ProposalTimelineItem[];
   actions: ProposalDetailAction[];
@@ -44,6 +46,7 @@ export interface ProposalDetailModel {
   proposal: ProposalDetailData;
   capabilities: ProtocolCapabilities;
   canVote: boolean;
+  hasVoted: boolean;
   canQueueProposal: boolean;
   canExecuteProposal: boolean;
   voteFor: () => Promise<void>;

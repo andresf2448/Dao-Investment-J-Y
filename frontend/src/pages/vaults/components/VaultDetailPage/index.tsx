@@ -113,6 +113,19 @@ export default function VaultDetailPage() {
     strategyExecutionReady &&
     !isSubmitting;
 
+  const strategyExecutionActions = [
+    {
+      action: 0 as const,
+      label: "Investment Strategies",
+      className: "btn-primary",
+    },
+    {
+      action: 1 as const,
+      label: "Divestment strategies",
+      className: "btn-secondary",
+    },
+  ] as const;
+
   const handleAddStrategyRow = () => {
     setStrategyAllocations((rows) => [
       ...rows,
@@ -531,13 +544,18 @@ export default function VaultDetailPage() {
               </p>
             </div>
 
-            <button
-              className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canExecuteStrategy}
-              onClick={() => void executeStrategy()}
-            >
-              Execute Strategy
-            </button>
+            <div className="grid gap-3">
+              {strategyExecutionActions.map(({ action, label, className }) => (
+                <button
+                  key={action}
+                  className={`${className} w-full disabled:cursor-not-allowed disabled:opacity-50`}
+                  disabled={!canExecuteStrategy}
+                  onClick={() => void executeStrategy(action)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </section>
       ) : null}
