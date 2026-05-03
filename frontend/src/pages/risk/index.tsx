@@ -262,13 +262,23 @@ export default function RiskPage() {
             error={form.heartbeatError}
             inputMode="numeric"
           />
-          <ConfigField
-            label="Stable Asset"
-            placeholder="true / false"
-            value={form.stableAsset}
-            onChange={form.setStableAsset}
-            error={form.stableAssetError}
-          />
+          <div>
+            <label className="text-sm text-text-secondary">Stable Asset</label>
+            <select
+              value={form.stableAsset}
+              onChange={(event) => form.setStableAsset(event.target.value)}
+              className="mt-2 w-full rounded-xl border border-border px-4 py-3 text-sm"
+            >
+              <option value="" disabled>
+                Select true or false
+              </option>
+              <option value="true">True</option>
+              <option value="false">False</option>
+            </select>
+            {form.stableAssetError ? (
+              <p className="mt-2 text-sm text-danger">{form.stableAssetError}</p>
+            ) : null}
+          </div>
           <ConfigField
             label="Depeg Min BPS"
             placeholder="e.g. 9800"

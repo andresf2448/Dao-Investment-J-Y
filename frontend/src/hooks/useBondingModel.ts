@@ -15,39 +15,13 @@ import type {
   BondingPosition,
   BondingState,
 } from "@/types/models/bonding";
-import {
-  abiERC20,
-  formatAddress,
-  formatTokenAmount,
-  getTransactionError,
-} from "@/utils";
+import { abiERC20, formatTokenAmount, getTransactionError } from "@/utils";
 import useWriteContracts from "./useWriteContracts";
 import { useProtocolReads } from "./useProtocolReads";
 import { useProtocolCapabilities } from "./useProtocolCapabilities";
 import { getReadContractResult } from "./shared/contractResults";
 import { resolveOptionalContract } from "./shared/resolveContract";
-
-const DEFAULT_TOKEN_DECIMALS = 18;
-
-function normalizeTokenDecimals(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "bigint") {
-    return Number(value);
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
-}
+import { useSupportedGenesisAssets } from "./shared/useSupportedGenesisAssets";
 
 export function useBondingModel(): BondingModel {
   const chainId = useChainId();
@@ -67,12 +41,12 @@ export function useBondingModel(): BondingModel {
   > | null>(() => {
     return resolveOptionalContract(chainId, getGenesisBondingContract);
   }, [chainId]);
+  const { supportedGenesisAssets } = useSupportedGenesisAssets();
 
   const {
     isFinalized,
     rate,
     totalDistributed,
-    assetsSupported,
     governanceTokenWalletBalance,
     refetch,
   } = useProtocolReads(bondingProtocolReadDefinitions, bondingReadContext);
@@ -91,58 +65,13 @@ export function useBondingModel(): BondingModel {
       ? "Enter a numeric amount greater than 0."
       : undefined;
 
-  const supportedAssets = useMemo<Address[]>(() => {
-    const contractAssets = (assetsSupported as Address[] | undefined) ?? [];
-
-    return contractAssets.filter(
-      (assetAddress): assetAddress is Address => Boolean(assetAddress),
-    );
-  }, [assetsSupported]);
-
-  const assetMetadataContracts = useMemo(
-    () =>
-      supportedAssets.flatMap((assetAddress) => [
-        {
-          abi: abiERC20,
-          address: assetAddress,
-          functionName: "symbol" as const,
-        },
-        {
-          abi: abiERC20,
-          address: assetAddress,
-          functionName: "decimals" as const,
-        },
-      ]),
-    [supportedAssets],
-  );
-
-  const { data: assetMetadataData } = useReadContracts({
-    allowFailure: true,
-    contracts: assetMetadataContracts,
-    query: {
-      enabled: assetMetadataContracts.length > 0,
-    },
-  });
-
   const assets = useMemo<BondingAsset[]>(() => {
-    return supportedAssets.map((assetAddress, index) => {
-      const symbolResult = getReadContractResult<string>(
-        assetMetadataData?.[index * 2],
-      );
-      const decimalsResult = getReadContractResult<
-        number | bigint | string
-      >(assetMetadataData?.[index * 2 + 1]);
-
-      const decimals =
-        normalizeTokenDecimals(decimalsResult) ?? DEFAULT_TOKEN_DECIMALS;
-
-      return {
-        symbol: symbolResult?.trim() || formatAddress(assetAddress),
-        address: assetAddress,
-        decimals,
-      };
-    });
-  }, [assetMetadataData, supportedAssets]);
+    return supportedGenesisAssets.map((asset) => ({
+      symbol: asset.symbol,
+      address: asset.address,
+      decimals: asset.decimals,
+    }));
+  }, [supportedGenesisAssets]);
 
   const selectedAsset = useMemo<BondingAsset | null>(() => {
     if (assets.length === 0) {

@@ -1,12 +1,8 @@
-import type { Address } from "viem";
 import { vaultFactoryAbi } from "@/constants/abi/vaultFactory";
-
-const vaultFactoryAddresses: Record<number, Address> = {
-  31337: "0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f",
-};
+import { VAULT_FACTORY_ADDRESSES } from "@/constants";
 
 export function getVaultFactoryContract(chainId: number) {
-  const address = vaultFactoryAddresses[chainId];
+  const address = VAULT_FACTORY_ADDRESSES[chainId];
 
   if (!address) {
     throw new Error("VaultFactory no desplegado en chainId " + chainId);

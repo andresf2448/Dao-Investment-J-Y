@@ -11,9 +11,10 @@ import type {
   ProposalComposerModel,
 } from "@/types/models/proposalComposer";
 import { useProtocolCapabilities } from "./useProtocolCapabilities";
-import { getReadContractResult } from "./shared/contractResults";
+import { getReadContractResult, ZERO_ADDRESS } from "./shared/contractResults";
 import { resolveOptionalContract } from "./shared/resolveContract";
 import {
+  formatAddress,
   formatTokenAmount,
   getTransactionError,
   isValidAddress,
@@ -83,10 +84,34 @@ export function useProposalComposerModel(): ProposalComposerModel {
     },
   });
 
+  const {
+    data: currentDelegateData,
+    isLoading: isCurrentDelegateLoading,
+    refetch: refetchCurrentDelegate,
+  } = useReadContracts({
+    allowFailure: true,
+    contracts:
+      governanceTokenConfig && connection.address
+        ? [
+            {
+              abi: governanceTokenConfig.abi,
+              address: governanceTokenConfig.address,
+              functionName: "delegates" as const,
+              args: [connection.address],
+            },
+          ]
+        : [],
+    query: {
+      enabled: Boolean(governanceTokenConfig && connection.address),
+    },
+  });
+
   const votingPowerValue =
     getReadContractResult<bigint>(votingPowerData?.[0]) ?? 0n;
   const proposalThresholdValue =
     getReadContractResult<bigint>(thresholdData?.[0]) ?? 0n;
+  const currentDelegateAddress =
+    getReadContractResult<Address>(currentDelegateData?.[0]) ?? undefined;
 
   const votingPower = formatTokenAmount(votingPowerValue, "GOV");
   const proposalThreshold = formatTokenAmount(proposalThresholdValue, "GOV");
@@ -99,10 +124,35 @@ export function useProposalComposerModel(): ProposalComposerModel {
     normalizedDelegateAddress !== "" && !isDelegateAddressValid
       ? "Enter a valid delegate address."
       : undefined;
+  const normalizedCurrentDelegateAddress = currentDelegateAddress?.toLowerCase();
+  const currentDelegateLabel = currentDelegateAddress
+    ? formatAddress(currentDelegateAddress)
+    : undefined;
+  const isCurrentDelegateSet =
+    normalizedCurrentDelegateAddress !== undefined &&
+    normalizedCurrentDelegateAddress !== ZERO_ADDRESS;
+  const isDelegationAlreadySet =
+    isDelegateAddressValid &&
+    Boolean(normalizedCurrentDelegateAddress) &&
+    normalizedDelegateAddress.toLowerCase() === normalizedCurrentDelegateAddress;
+  const delegateStatusMessage =
+    isCurrentDelegateLoading
+      ? "Checking your current delegation..."
+      : !isCurrentDelegateSet
+      ? "No delegate is set yet. You can delegate to any valid address."
+      : normalizedDelegateAddress === ""
+      ? `Current delegate: ${currentDelegateLabel}`
+      : !isDelegateAddressValid
+      ? undefined
+      : isDelegationAlreadySet
+      ? "Votes are already delegated to this address."
+      : `Current delegate: ${currentDelegateLabel}`;
   const canDelegateVotes =
     Boolean(connection.address) &&
     isDelegateAddressValid &&
-    !isDelegatingVotes;
+    !isDelegatingVotes &&
+    !isCurrentDelegateLoading &&
+    !isDelegationAlreadySet;
   const isTitleValid = title.trim().length >= 5;
   const isDescriptionValid = description.trim().length >= 10;
   const areActionsValid = actions.every((action) => {
@@ -174,6 +224,7 @@ export function useProposalComposerModel(): ProposalComposerModel {
       }
 
       await refetchVotingPower();
+      await refetchCurrentDelegate();
 
       setDelegateAddress("");
       Swal.close();
@@ -324,6 +375,8 @@ export function useProposalComposerModel(): ProposalComposerModel {
     delegateAddress,
     setDelegateAddress,
     delegateAddressError,
+    currentDelegateAddress,
+    delegateStatusMessage,
     canDelegateVotes,
     isDelegatingVotes,
     delegateVotes,

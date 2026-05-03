@@ -1,4 +1,5 @@
 import type { ProtocolCapabilities } from "@/types/capabilities";
+import type { Address } from "viem";
 
 export interface ProposalActionInput {
   id: string;
@@ -26,6 +27,8 @@ export interface ProposalComposerModel {
   delegateAddress: string;
   setDelegateAddress: (value: string) => void;
   delegateAddressError?: string;
+  currentDelegateAddress?: Address;
+  delegateStatusMessage?: string;
   canDelegateVotes: boolean;
   isDelegatingVotes: boolean;
   delegateVotes: () => Promise<void>;

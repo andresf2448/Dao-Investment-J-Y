@@ -1,78 +1,19 @@
 import { useMemo } from "react";
-import type { Abi, Address } from "viem";
 import { useChainId, useReadContracts } from "wagmi";
 import { getReadResultValue } from "./shared/contractResults";
+import { resolveContract } from "./shared/resolveContract";
+import type {
+  ProtocolReadContractConfig,
+  ProtocolReadDefinition,
+  ProtocolReadsHookResult,
+  ProtocolReadsResult,
+  ProtocolReadValue,
+  ResolvedProtocolReadDefinition,
+} from "./shared/protocolReads";
 import {
-  type ContractReferenceWithOptionalAddress,
-  resolveContract,
-} from "./shared/resolveContract";
-import { type ProtocolContractGetterName } from "./protocolContracts";
-
-type ProtocolReadArgs<TContext> =
-  | readonly unknown[]
-  | ((context: TContext) => readonly unknown[] | undefined);
-
-type ProtocolContractSpec =
-  | ProtocolContractGetterName
-  | ContractReferenceWithOptionalAddress;
-
-export type ProtocolReadDefinition<
-  TKey extends string = string,
-  TContext = void,
-> = {
-  key: TKey;
-  contract: ProtocolContractSpec;
-  functionName: string;
-  args?: ProtocolReadArgs<TContext>;
-};
-
-type ProtocolReadPrimitive = bigint | boolean | string | void;
-
-type ProtocolReadArray = readonly unknown[] | readonly Address[];
-
-type ProtocolReadValue =
-  | ProtocolReadPrimitive
-  | ProtocolReadArray
-  | undefined;
-
-export type ProtocolReadsResult<TKey extends string> = Record<TKey, ProtocolReadValue>;
-
-export type ProtocolReadsHookResult<TKey extends string> =
-  ProtocolReadsResult<TKey> & {
-    refetch: () => Promise<unknown>;
-  };
-
-type ResolvedProtocolReadDefinition<TKey extends string = string> = {
-  key: TKey;
-  contract: ProtocolContractSpec;
-  functionName: string;
-  args?: readonly unknown[];
-};
-
-type ProtocolReadContractConfig<TKey extends string = string> = {
-  key: TKey;
-  abi: Abi;
-  address: Address;
-  functionName: string;
-  args?: readonly unknown[];
-};
-
-function isValidProtocolReadContractConfig<TKey extends string>(
-  value: ProtocolReadContractConfig<TKey> | undefined,
-): value is ProtocolReadContractConfig<TKey> {
-  return !!value && !!value.address && value.abi.length > 0;
-}
-
-function resolveDefinitionArgs<TContext>(
-  args: ProtocolReadArgs<TContext> | undefined,
-  context: TContext | undefined,
-) {
-  if (typeof args === "function") {
-    return args(context as TContext);
-  }
-
-  return args;
-}
+  isValidProtocolReadContractConfig,
+  resolveDefinitionArgs,
+} from "./shared/protocolReads";
 
 export function useProtocolReads<TKey extends string, TContext = void>(
   definitions: readonly ProtocolReadDefinition<TKey, TContext>[],

@@ -1,8 +1,6 @@
 import type { Abi, Address } from "viem";
-import {
-  type ProtocolContractGetterName,
-  resolveProtocolContract,
-} from "../protocolContracts";
+import type { ProtocolContractGetterName } from "../definitions/protocolContracts";
+import { resolveProtocolContract } from "../protocolContracts";
 
 export function resolveOptionalContract<T>(
   chainId: number,

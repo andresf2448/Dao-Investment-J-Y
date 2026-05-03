@@ -1,40 +1,18 @@
 import { useMemo } from "react";
-import { useConnection, useReadContracts } from "wagmi";
-import type { Abi, Address } from "viem";
+import { useChainId, useConnection, useReadContracts } from "wagmi";
+import type { Address } from "viem";
 import type {
   MyVaultPositionsModel,
   VaultPositionItem,
 } from "@/types/models/myVaultPositions";
 import { useProtocolCapabilities } from "./useProtocolCapabilities";
-import { useProtocolReads } from "./useProtocolReads";
-import { useVaultsModelProtocolReadDefinitions } from "./definitions/protocolReads";
 import { getVaultRegistryContract } from "@dao/contracts-sdk";
-import { useChainId } from "wagmi";
 import { resolveOptionalContract } from "./shared/resolveContract";
 import { getReadContractResult } from "./shared/contractResults";
 import type { VaultRegistryDetail } from "./shared/contractTypes";
 import { formatTokenAmount, formatAddress } from "@/utils";
 import { abiERC20 } from "@/utils";
-
-const balanceOfAbi = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-] as const satisfies Abi;
-
-const previewRedeemAbi = [
-  {
-    type: "function",
-    name: "previewRedeem",
-    stateMutability: "view",
-    inputs: [{ name: "shares", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-] as const satisfies Abi;
+import { resolveProtocolContract } from "./protocolContracts";
 
 export function useMyVaultPositionsModel(): MyVaultPositionsModel {
   const chainId = useChainId();
@@ -44,6 +22,10 @@ export function useMyVaultPositionsModel(): MyVaultPositionsModel {
   const vaultRegistryConfig = useMemo(() => {
     return resolveOptionalContract(chainId, getVaultRegistryContract);
   }, [chainId]);
+  const vaultImplementationConfig = useMemo(
+    () => resolveProtocolContract(chainId, "getVaultImplementationContract"),
+    [chainId],
+  );
 
   // Get all registered vaults and filter by connected account investment
   const { data: allVaultsData } = useReadContracts({
@@ -71,16 +53,20 @@ export function useMyVaultPositionsModel(): MyVaultPositionsModel {
   const { data: balanceData } = useReadContracts({
     allowFailure: true,
     contracts:
-      vaultRegistryConfig && connection.address
+      vaultImplementationConfig && connection.address
         ? vaultAddresses.map((vaultAddress) => ({
-            abi: balanceOfAbi,
+            abi: vaultImplementationConfig.abi,
             address: vaultAddress,
             functionName: "balanceOf",
             args: [connection.address as Address],
           }))
         : [],
     query: {
-      enabled: Boolean(vaultRegistryConfig && connection.address && vaultAddresses.length > 0),
+      enabled: Boolean(
+        vaultImplementationConfig &&
+          connection.address &&
+          vaultAddresses.length > 0,
+      ),
     },
   });
   // Read vault details for all vaults
@@ -163,14 +149,16 @@ export function useMyVaultPositionsModel(): MyVaultPositionsModel {
   // Read previewRedeem for deposited
   const { data: previewRedeemData } = useReadContracts({
     allowFailure: true,
-    contracts: vaultsWithBalance.map(({ vaultAddress, balance }) => ({
-      abi: previewRedeemAbi,
-      address: vaultAddress,
-      functionName: "previewRedeem",
-      args: [balance],
-    })),
+    contracts: vaultImplementationConfig
+      ? vaultsWithBalance.map(({ vaultAddress, balance }) => ({
+          abi: vaultImplementationConfig.abi,
+          address: vaultAddress,
+          functionName: "previewRedeem",
+          args: [balance],
+        }))
+      : [],
     query: {
-      enabled: vaultsWithBalance.length > 0,
+      enabled: Boolean(vaultImplementationConfig && vaultsWithBalance.length > 0),
     },
   });
 

@@ -7,7 +7,11 @@ import {
   HeroMetric,
   MetricCard,
 } from "@/components/shared";
-import { ProposalStatus, LifecycleStep } from "./components";
+import {
+  DelegateVotingPowerCard,
+  ProposalStatus,
+  LifecycleStep,
+} from "./components";
 import { truncateMiddle } from "@/utils";
 
 export default function GovernancePage() {
@@ -141,6 +145,8 @@ export default function GovernancePage() {
         </div>
 
         <div className="grid gap-6 self-start">
+          <DelegateVotingPowerCard />
+
           <div className="card h-full">
             <div className="card-header">Proposal Lifecycle</div>
 

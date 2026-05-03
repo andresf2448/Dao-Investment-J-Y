@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  Filter,
   ShieldCheck,
   Vault,
   WalletCards,
@@ -31,7 +30,6 @@ export default function VaultsPage() {
     capabilities,
   } = useVaultsModel();
 
-  const creationAccessValue = isVaultCreationPaused ? "Paused" : "Enabled";
   const creationSummaryStatus = isVaultCreationPaused ? "Paused" : "Available";
   const creationSummaryTone = isVaultCreationPaused ? "warning" : "success";
   const creationAssetsDescription = isVaultCreationPaused

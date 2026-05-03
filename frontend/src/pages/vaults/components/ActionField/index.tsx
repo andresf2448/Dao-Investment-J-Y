@@ -7,6 +7,9 @@ interface ActionFieldProps {
   onChange?: (value: string) => void;
   error?: string;
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
+  actionLabel?: string;
+  onAction?: () => void;
+  actionDisabled?: boolean;
 }
 
 export function ActionField({
@@ -16,10 +19,25 @@ export function ActionField({
   onChange,
   error,
   inputMode,
+  actionLabel,
+  onAction,
+  actionDisabled,
 }: ActionFieldProps) {
   return (
     <div>
-      <label className="text-sm text-text-secondary">{label}</label>
+      <div className="flex items-center justify-between gap-3">
+        <label className="text-sm text-text-secondary">{label}</label>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            disabled={actionDisabled}
+            className="rounded-full border border-border bg-gray-50 px-3 py-1 text-xs font-semibold text-text-primary transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
       <input
         type="text"
         value={value}

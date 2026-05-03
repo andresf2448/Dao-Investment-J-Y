@@ -1,4 +1,4 @@
-import { mainnet, sepolia, anvil } from "wagmi/chains";
+import { mainnet, sepolia } from "wagmi/chains";
 import { defineChain } from "viem";
 
 export const localAnvil = defineChain({

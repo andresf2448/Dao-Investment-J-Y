@@ -1,7 +1,6 @@
-import { getProtocolCoreContract, getTreasuryContract } from "@dao/contracts-sdk";
+import { getTreasuryContract } from "@dao/contracts-sdk";
 import { useMemo } from "react";
 import { useChainId, useReadContracts } from "wagmi";
-import { getKnownProtocolAssets } from "@/constants/protocolAssets";
 import { formatTokenAmount } from "@/utils";
 import type {
   TreasuryAsset,
@@ -12,44 +11,16 @@ import type { AssetCategory, AssetVisibility } from "@/types/treasury";
 import { useProtocolCapabilities } from "./useProtocolCapabilities";
 import { getReadContractResult } from "./shared/contractResults";
 import { resolveOptionalContract } from "./shared/resolveContract";
+import { useSupportedGenesisAssets } from "./shared/useSupportedGenesisAssets";
 
 export function useTreasuryModel(): TreasuryModel {
   const chainId = useChainId();
   const capabilities = useProtocolCapabilities();
+  const { supportedGenesisAssets } = useSupportedGenesisAssets();
 
   const treasuryConfig = useMemo(() => {
     return resolveOptionalContract(chainId, getTreasuryContract);
   }, [chainId]);
-
-  const protocolCoreConfig = useMemo(() => {
-    return resolveOptionalContract(chainId, getProtocolCoreContract);
-  }, [chainId]);
-
-  const knownAssets = useMemo(() => getKnownProtocolAssets(chainId), [chainId]);
-
-  const { data: supportedGenesisTokensData } = useReadContracts({
-    allowFailure: true,
-    contracts: protocolCoreConfig
-      ? [
-          {
-            abi: protocolCoreConfig.abi,
-            address: protocolCoreConfig.address,
-            functionName: "getSupportedGenesisTokens" as const,
-          },
-        ]
-      : [],
-    query: {
-      enabled: Boolean(protocolCoreConfig),
-    },
-  });
-
-  const supportedGenesisTokens = useMemo(
-    () =>
-      (getReadContractResult<readonly `0x${string}`[]>(
-        supportedGenesisTokensData?.[0],
-      ) ?? []) as readonly `0x${string}`[],
-    [supportedGenesisTokensData],
-  );
 
   const treasuryReadContracts = useMemo(() => {
     if (!treasuryConfig) {
@@ -57,7 +28,7 @@ export function useTreasuryModel(): TreasuryModel {
     }
 
     return [
-      ...knownAssets.map((asset) => ({
+      ...supportedGenesisAssets.map((asset) => ({
         abi: treasuryConfig.abi,
         address: treasuryConfig.address,
         functionName: "erc20Balance" as const,
@@ -69,7 +40,7 @@ export function useTreasuryModel(): TreasuryModel {
         functionName: "nativeBalance" as const,
       },
     ];
-  }, [knownAssets, treasuryConfig]);
+  }, [supportedGenesisAssets, treasuryConfig]);
 
   const { data: treasuryBalancesData } = useReadContracts({
     allowFailure: true,
@@ -79,11 +50,16 @@ export function useTreasuryModel(): TreasuryModel {
     },
   });
 
+  const nativeBalance =
+    getReadContractResult<bigint>(
+      treasuryBalancesData?.[supportedGenesisAssets.length],
+    ) ?? 0n;
+
   const assets = useMemo<TreasuryAsset[]>(() => {
-    const erc20Assets = knownAssets.map((asset, index) => {
-      const rawBalance = getReadContractResult<bigint>(treasuryBalancesData?.[index]) ?? 0n;
-      const isDaoAsset = supportedGenesisTokens.includes(asset.address);
-      const category: AssetCategory = isDaoAsset ? "DAO Asset" : "Non-DAO Asset";
+    return supportedGenesisAssets.map((asset, index) => {
+      const rawBalance =
+        getReadContractResult<bigint>(treasuryBalancesData?.[index]) ?? 0n;
+      const category: AssetCategory = "DAO Asset";
       const visibility: AssetVisibility = treasuryConfig ? "Tracked" : "Unavailable";
 
       return {
@@ -94,32 +70,16 @@ export function useTreasuryModel(): TreasuryModel {
         visibility,
       };
     });
-
-    const nativeBalance = getReadContractResult<bigint>(
-      treasuryBalancesData?.[knownAssets.length],
-    ) ?? 0n;
-
-    return [
-      ...erc20Assets,
-      {
-        token: "ETH",
-        type: "Native" as const,
-        balance: formatTokenAmount(nativeBalance, "ETH", 18),
-        category: "Native Asset",
-        visibility: treasuryConfig ? "Tracked" : "Unavailable",
-      },
-    ];
-  }, [knownAssets, supportedGenesisTokens, treasuryBalancesData, treasuryConfig]);
+  }, [supportedGenesisAssets, treasuryBalancesData, treasuryConfig]);
 
   const daoAssetCount = assets.filter((asset) => asset.category === "DAO Asset").length;
-  const nativeBalance = assets.find((asset) => asset.type === "Native")?.balance ?? "—";
 
   const metrics: TreasuryMetrics = {
-    trackedErc20Assets: knownAssets.length,
+    trackedErc20Assets: supportedGenesisAssets.length,
     daoAssetExposure: `${daoAssetCount} DAO asset${daoAssetCount === 1 ? "" : "s"} tracked`,
     operationalLiquidity:
-      treasuryConfig && knownAssets.length > 0 ? "Tracked" : "Unavailable",
-    nativeReserve: nativeBalance,
+      treasuryConfig && supportedGenesisAssets.length > 0 ? "Tracked" : "Unavailable",
+    nativeReserve: formatTokenAmount(nativeBalance, "ETH", 18),
   };
 
   return {

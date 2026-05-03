@@ -12,6 +12,7 @@ import type {
   InfrastructureWiring,
   OperationsModel,
   OperationsStatus,
+  WiringStatusTone,
 } from "@/types/models/operations";
 import { getKnownProtocolAssets } from "@/constants/protocolAssets";
 import {
@@ -263,14 +264,24 @@ export function useOperationsModel(): OperationsModel {
     adapterStrategyInputTrimmed === ""
       ? undefined
       : !isValidAddress(adapterStrategyInputTrimmed)
-      ? undefined
+      ? "Enter a valid adapter address."
       : adapterStrategyValidationReads.isLoading
       ? "Checking adapter against StrategyRouter..."
       : adapterStrategyAllowed
-      ? "Adapter already exists in StrategyRouter."
+      ? "Adapter already enabled in StrategyRouter."
       : adapterStrategyValidationReads.isError
       ? "Unable to validate adapter against StrategyRouter."
-      : "Adapter is not enabled in StrategyRouter.";
+      : "Available to add in StrategyRouter.";
+  const adapterStrategyStatusTone: WiringStatusTone =
+    adapterStrategyInputTrimmed === ""
+      ? "neutral"
+      : !isValidAddress(adapterStrategyInputTrimmed)
+      ? "danger"
+      : adapterStrategyValidationReads.isLoading
+      ? "neutral"
+      : adapterStrategyValidationReads.isError
+      ? "danger"
+      : "success";
 
   const canSubmitFactoryRouter =
     capabilities.canCreateProposal &&
@@ -718,6 +729,7 @@ export function useOperationsModel(): OperationsModel {
       setAdapterStrategyInput,
       adapterStrategyError,
       adapterStrategyStatusMessage,
+      adapterStrategyStatusTone,
       canSubmitAdapterStrategy,
       adapterStrategyAllowed,
       wiringPermissionMessage: proposalPermissionMessage,

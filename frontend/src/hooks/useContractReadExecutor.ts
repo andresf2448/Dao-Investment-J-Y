@@ -10,7 +10,7 @@ export type ExecuteReadParams = ContractReferenceWithOptionalAddress & {
   account?: Address;
 };
 
-const useContractReadExecutor = () => {
+export default function useContractReadExecutor() {
   const chainId: number = useChainId();
 
   const executeRead = useCallback(
@@ -34,6 +34,4 @@ const useContractReadExecutor = () => {
   return {
     executeRead,
   };
-};
-
-export default useContractReadExecutor;
+}

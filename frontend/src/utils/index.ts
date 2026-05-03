@@ -4,6 +4,7 @@ export * from "./formatNumber";
 export * from "./formatDate";
 export * from "./networks";
 export * from "./abiERC20";
+export * from "./abiStrategyAdapter";
 export * from "./transactionErrors";
 export * from "./truncateMiddle";
 export * from "./blockTime";

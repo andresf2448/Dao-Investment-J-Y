@@ -49,13 +49,13 @@ export default function TreasuryPage() {
         <MetricCard
           title="ERC20 Composition"
           value={`${metrics.trackedErc20Assets} tokens`}
-          subtitle="USDT and USDC balances are read directly from Treasury."
+          subtitle="Supported bonding assets are read directly from the Treasury contract."
           icon={<Coins className="h-5 w-5" />}
         />
         <MetricCard
           title="Treasury Composition"
           value={metrics.operationalLiquidity === "Tracked" ? "Tracked" : "Empty"}
-          subtitle="Asset allocation now includes ERC20 and native treasury balances."
+          subtitle="Asset allocation now reflects the supported genesis token set."
           icon={<PieChart className="h-5 w-5" />}
         />
       </section>
@@ -135,12 +135,12 @@ export default function TreasuryPage() {
                 description="DAO-classified assets use withdrawDaoERC20(...) and require the treasury admin role."
               />
               <NoteRow
-                title="Non-DAO Asset Controls"
-                description="Non-DAO assets are surfaced for visibility, but direct sweep withdrawals are not exposed in this MVP."
+                title="Live Asset Source"
+                description="The treasury view now reflects protocol-supported assets instead of a static mock list."
               />
               <NoteRow
                 title="Native Treasury Balance"
-                description="Native balance is surfaced via nativeBalance() and can be withdrawn with withdrawDaoNative(...)."
+                description="Native balance is surfaced via nativeBalance() and exposed in the treasury summary cards."
               />
             </div>
           </div>
@@ -151,7 +151,7 @@ export default function TreasuryPage() {
         <MiniSummaryCard
           title="Tracked ERC20 Assets"
           value={`${metrics.trackedErc20Assets} Assets`}
-          subtitle="USDT and USDC balances are classified and surfaced"
+          subtitle="Protocol-supported balances are classified and surfaced"
         />
         <MiniSummaryCard
           title="Native Reserve"

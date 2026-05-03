@@ -1,4 +1,4 @@
-import type { ProtocolReadDefinition } from "@/hooks/useProtocolReads";
+import type { ProtocolReadDefinition } from "@/hooks/shared/protocolReads";
 import type { Address } from "viem";
 
 export type DashboardProtocolReadContext = {
@@ -12,6 +12,10 @@ export type BondingProtocolReadContext = {
 export type GuardiansProtocolReadContext = {
   userAddress?: Address;
   proposalId?: number;
+};
+
+export type VaultDetailProtocolContext = {
+  vaultAddress: Address | undefined;
 };
 
 export const dashboardProtocolReadDefinitions = [
@@ -77,11 +81,6 @@ export const bondingProtocolReadDefinitions = [
     key: "totalDistributed",
     contract: "getGenesisBondingContract",
     functionName: "totalGovernanceTokenPurchased",
-  },
-  {
-    key: "assetsSupported",
-    contract: "getProtocolCoreContract",
-    functionName: "getSupportedGenesisTokens",
   },
   {
     key: "governanceTokenWalletBalance",
@@ -171,3 +170,26 @@ export const useVaultsModelProtocolReadDefinitions = [
     functionName: "isVaultCreationPaused",
   },
 ] as const satisfies readonly ProtocolReadDefinition<string, void>[];
+
+export const vaultDetailProtocolDefinitions = [
+  {
+    key: "vaultDetail",
+    contract: "getVaultRegistryContract",
+    functionName: "getVaultDetail",
+    args: (context: VaultDetailProtocolContext) =>
+      context.vaultAddress ? [context.vaultAddress] : undefined,
+  },
+  {
+    key: "isVaultDepositsPaused",
+    contract: "getProtocolCoreContract",
+    functionName: "isVaultDepositsPaused",
+  },
+  {
+    key: "isExecutionPaused",
+    contract: "getRiskManagerContract",
+    functionName: "executionPaused",
+  },
+] as const satisfies readonly ProtocolReadDefinition<
+  "vaultDetail" | "isVaultDepositsPaused" | "isExecutionPaused",
+  VaultDetailProtocolContext
+>[];

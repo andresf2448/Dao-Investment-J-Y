@@ -4,7 +4,6 @@ import { HeroMetric, InfoRow } from "@/components/shared";
 
 export default function TreasuryOperationsPage() {
   const {
-    tokens,
     tokenAddress,
     setTokenAddress,
     selectedToken,

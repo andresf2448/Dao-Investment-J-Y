@@ -1,4 +1,5 @@
 export { default as CreateProposalPage } from "./CreateProposalPage";
+export { default as DelegateVotingPowerCard } from "./DelegateVotingPowerCard";
 export { default as ProposalDetailPage } from "./ProposalDetailPage";
 export { LifecycleStep } from "./LifecycleStep";
 export { ProposalStatus } from "./ProposalStatus";

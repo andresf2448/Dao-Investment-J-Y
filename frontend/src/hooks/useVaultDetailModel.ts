@@ -15,6 +15,8 @@ import {
   abiERC20,
   formatAddress,
   formatTokenAmount,
+  formatTokenAmountFloor,
+  formatTokenAmountInput,
   getTransactionError,
   isValidAddress,
   parseTimestamp,
@@ -24,56 +26,18 @@ import {
 import type { VaultRegistryDetail } from "./shared/contractTypes";
 import useWriteContracts from "./useWriteContracts";
 import { useProtocolReads } from "./useProtocolReads";
-import type { ProtocolReadDefinition } from "./useProtocolReads";
+import type { ProtocolReadDefinition } from "./shared/protocolReads";
 import useContractReadExecutor from "./useContractReadExecutor";
-import { getReadContractResult } from "./shared/contractResults";
+import {
+  getReadContractResult,
+  toBigIntValue,
+} from "./shared/contractResults";
 import { resolveProtocolContract } from "./protocolContracts";
-
-type VaultDetailProtocolContext = {
-  vaultAddress: Address | undefined;
-};
-
-const strategyActionCopy: Record<
-  VaultStrategyAction,
-  {
-    title: string;
-    confirmation: string;
-  }
-> = {
-  0: {
-    title: "Execute investment strategy",
-    confirmation:
-      "Confirm the investment strategy transaction in your wallet. The vault allocation will be routed across the selected adapters.",
-  },
-  1: {
-    title: "Execute Divestment strategy",
-    confirmation:
-      "Confirm the Divestment strategy transaction in your wallet. The vault allocation will be routed across the selected adapters.",
-  },
-};
-
-const vaultDetailProtocolDefinitions: ProtocolReadDefinition<
-  "vaultDetail" | "isVaultDepositsPaused" | "isExecutionPaused",
-  VaultDetailProtocolContext
->[] = [
-  {
-    key: "vaultDetail",
-    contract: "getVaultRegistryContract",
-    functionName: "getVaultDetail",
-    args: (context) =>
-      context.vaultAddress ? [context.vaultAddress] : undefined,
-  },
-  {
-    key: "isVaultDepositsPaused",
-    contract: "getProtocolCoreContract",
-    functionName: "isVaultDepositsPaused",
-  },
-  {
-    key: "isExecutionPaused",
-    contract: "getRiskManagerContract",
-    functionName: "executionPaused",
-  },
-];
+import {
+  vaultDetailProtocolDefinitions,
+  type VaultDetailProtocolContext,
+} from "./definitions/protocolReads";
+import { strategyActionCopy } from "./definitions/vaultDetail";
 
 export function useVaultDetailModel(
   vaultAddress?: string,
@@ -91,24 +55,11 @@ export function useVaultDetailModel(
   const [maxWithdraw, setMaxWithdraw] = useState<bigint | undefined>();
   const [maxRedeem, setMaxRedeem] = useState<bigint | undefined>();
   const [totalAssets, setTotalAssets] = useState<bigint | undefined>();
+  const [investedAssets, setInvestedAssets] = useState<bigint | undefined>();
+  const [availableAssets, setAvailableAssets] = useState<bigint | undefined>();
   const [depositedAssets, setDepositedAssets] = useState<bigint | undefined>();
+  const [shareValue, setShareValue] = useState<bigint | undefined>();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  const toBigIntValue = (value: unknown): bigint => {
-    if (typeof value === "bigint") {
-      return value;
-    }
-
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return BigInt(Math.trunc(value));
-    }
-
-    if (typeof value === "string" && value.trim() !== "") {
-      return BigInt(value);
-    }
-
-    return 0n;
-  };
 
   const resolvedVaultAddress = useMemo(
     () =>
@@ -327,22 +278,97 @@ export function useVaultDetailModel(
   const strategyExecutionReady =
     strategyAllocationStatuses.length > 0 &&
     strategyAllocationStatuses.every((row) => row.isComplete) &&
-    strategyAllocationTotal === 100;
+    strategyAllocationTotal <= 100;
 
   useEffect(() => {
-    if (resolvedVaultAddress && connection.address) {
-      return;
+    if (!resolvedVaultAddress) {
+      setVaultDecimals(undefined);
+      setTotalAssets(undefined);
+      setInvestedAssets(undefined);
+      setAvailableAssets(undefined);
+      setShareValue(undefined);
     }
 
-    setVaultDecimals(undefined);
-    setMintedShares(undefined);
-    setMaxWithdraw(undefined);
-    setMaxRedeem(undefined);
-    setTotalAssets(undefined);
-    setDepositedAssets(undefined);
+    if (!connection.address) {
+      setMintedShares(undefined);
+      setMaxWithdraw(undefined);
+      setMaxRedeem(undefined);
+      setDepositedAssets(undefined);
+    }
   }, [resolvedVaultAddress, connection.address]);
 
-  // Fetch vault data using executeRead
+  useEffect(() => {
+    if (!resolvedVaultAddress) return;
+    let isActive = true;
+
+    const fetchVaultData = async () => {
+      try {
+        const decimals = await executeRead({
+          functionName: "decimals",
+          functionContract: "getVaultImplementationContract",
+          args: [],
+          address: resolvedVaultAddress,
+        });
+        if (!isActive) return;
+        setVaultDecimals(Number(toBigIntValue(decimals)));
+
+        const totalA = await executeRead({
+          functionName: "totalAssets",
+          functionContract: "getVaultImplementationContract",
+          args: [],
+          address: resolvedVaultAddress,
+        });
+        if (!isActive) return;
+        const totalAssetsValue = toBigIntValue(totalA);
+        setTotalAssets(totalAssetsValue);
+
+        const vaultAsset =
+          vaultDetailTyped?.asset ??
+          ((await executeRead({
+            functionName: "asset",
+            functionContract: "getVaultImplementationContract",
+            args: [],
+            address: resolvedVaultAddress,
+          })) as Address | undefined);
+
+        if (!isActive) return;
+
+        if (!vaultAsset) {
+          setInvestedAssets(0n);
+          setAvailableAssets(totalAssetsValue);
+          return;
+        }
+
+        const idleAssets = await executeRead({
+          abi: abiERC20,
+          address: vaultAsset,
+          functionName: "balanceOf",
+          args: [resolvedVaultAddress],
+        });
+
+        if (!isActive) return;
+
+        const availableAssetsValue = toBigIntValue(idleAssets);
+        const investedAssetsValue =
+          totalAssetsValue > availableAssetsValue
+            ? totalAssetsValue - availableAssetsValue
+            : 0n;
+
+        setInvestedAssets(investedAssetsValue);
+        setAvailableAssets(availableAssetsValue);
+      } catch (error) {
+        console.error("Error fetching vault data:", error);
+      }
+    };
+
+    void fetchVaultData();
+
+    return () => {
+      isActive = false;
+    };
+  }, [resolvedVaultAddress, executeRead, refreshTrigger, vaultDetailTyped?.asset]);
+
+  // Fetch vault position using executeRead
   useEffect(() => {
     if (!resolvedVaultAddress || !connection.address) return;
     let isActive = true;
@@ -384,15 +410,6 @@ export function useVaultDetailModel(
         });
         if (!isActive) return;
         setMaxRedeem(toBigIntValue(maxR));
-
-        const totalA = await executeRead({
-          functionName: "totalAssets",
-          functionContract: "getVaultImplementationContract",
-          args: [],
-          address: resolvedVaultAddress,
-        });
-        if (!isActive) return;
-        setTotalAssets(toBigIntValue(totalA));
       } catch (error) {
         console.error("Error fetching vault data:", error);
       }
@@ -435,6 +452,38 @@ export function useVaultDetailModel(
     };
   }, [resolvedVaultAddress, mintedShares, executeRead, refreshTrigger]);
 
+  useEffect(() => {
+    if (!resolvedVaultAddress || vaultDecimalsValue === undefined) {
+      setShareValue(undefined);
+      return;
+    }
+
+    let isActive = true;
+
+    const fetchShareValue = async () => {
+      try {
+        const oneShare = parseTokenAmount("1", vaultDecimalsValue);
+        const value = await executeRead({
+          functionName: "previewRedeem",
+          functionContract: "getVaultImplementationContract",
+          args: [oneShare],
+          address: resolvedVaultAddress,
+        });
+
+        if (!isActive) return;
+        setShareValue(toBigIntValue(value));
+      } catch (error) {
+        console.error("Error fetching share value:", error);
+      }
+    };
+
+    void fetchShareValue();
+
+    return () => {
+      isActive = false;
+    };
+  }, [resolvedVaultAddress, vaultDecimalsValue, executeRead, refreshTrigger]);
+
   const mintedSharesValueTyped = mintedShares ?? 0n;
 
   // Extract values
@@ -445,7 +494,12 @@ export function useVaultDetailModel(
   const maxWithdrawValueTyped = maxWithdraw ?? 0n;
   const maxRedeemValueTyped = maxRedeem ?? 0n;
   const totalAssetsValueTyped = totalAssets ?? 0n;
+  const investedAssetsValueTyped = investedAssets ?? 0n;
+  const availableAssetsValueTyped = availableAssets ?? 0n;
   const depositedAssetsValueTyped = depositedAssets ?? 0n;
+  const shareValueTyped = shareValue ?? 0n;
+  const hasWithdrawableAssets = maxWithdrawValueTyped > 0n;
+  const hasRedeemableShares = maxRedeemValueTyped > 0n;
 
   // Assign to old variable names for compatibility
   const assetSymbol = assetSymbolTyped ?? (vaultDetailTyped?.asset ? formatAddress(vaultDetailTyped.asset) : "—");
@@ -462,7 +516,26 @@ export function useVaultDetailModel(
   const maxWithdrawValue = maxWithdrawValueTyped;
   const maxRedeemValue = maxRedeemValueTyped;
   const totalAssetsValue = totalAssetsValueTyped;
+  const investedAssetsValue = investedAssetsValueTyped;
+  const availableAssetsValue = availableAssetsValueTyped;
   const depositedAssetsValue = depositedAssetsValueTyped;
+
+  const maxWithdrawInputValue = formatTokenAmountInput(
+    maxWithdrawValue,
+    assetDecimals,
+  );
+  const maxRedeemInputValue = formatTokenAmountInput(
+    maxRedeemValue,
+    vaultDecimals,
+  );
+  const isWithdrawAmountWithinLimit = (amount: string): boolean => {
+    const parsedAmount = parseTokenAmount(amount, assetDecimals);
+    return parsedAmount > 0n && parsedAmount <= maxWithdrawValue;
+  };
+  const isRedeemAmountWithinLimit = (amount: string): boolean => {
+    const parsedShares = parseTokenAmount(amount, vaultDecimals);
+    return parsedShares > 0n && parsedShares <= maxRedeemValue;
+  };
 
   // Explicitly refresh total assets to ensure UI reflects on-chain changes
   const refreshTotalAssets = async () => {
@@ -638,6 +711,15 @@ export function useVaultDetailModel(
 
     const parsedAmount = parseTokenAmount(amount, assetDecimals);
     if (parsedAmount <= 0n) return false;
+    if (parsedAmount > maxWithdrawValue) {
+      await Swal.fire({
+        title: "Withdraw amount exceeds your limit",
+        text: "Use the Max button or enter a lower amount. The vault limit is checked with exact on-chain decimals.",
+        icon: "warning",
+        confirmButtonText: "OK",
+      });
+      return false;
+    }
 
     return executeVaultTransaction(
       "Withdraw assets",
@@ -666,6 +748,15 @@ export function useVaultDetailModel(
 
     const parsedShares = parseTokenAmount(amount, vaultDecimals);
     if (parsedShares <= 0n) return false;
+    if (parsedShares > maxRedeemValue) {
+      await Swal.fire({
+        title: "Redeem amount exceeds your limit",
+        text: "Use the Max button or enter a lower share amount. The vault limit is checked with exact on-chain decimals.",
+        icon: "warning",
+        confirmButtonText: "OK",
+      });
+      return false;
+    }
 
     return executeVaultTransaction(
       "Redeem shares",
@@ -738,7 +829,7 @@ export function useVaultDetailModel(
       (allocation) => allocation.adapter.trim() as Address,
     );
     const percentages = strategyAllocationStatuses.map((allocation) =>
-      BigInt(allocation.percentage.trim()),
+      BigInt(Math.round(Number(allocation.percentage.trim()) * 100)),
     );
 
     return executeVaultTransaction(
@@ -793,6 +884,16 @@ export function useVaultDetailModel(
       assetSymbol === "—" ? undefined : assetSymbol,
       assetDecimals,
     ),
+    investedAssets: formatTokenAmount(
+      investedAssetsValue,
+      assetSymbol === "—" ? undefined : assetSymbol,
+      assetDecimals,
+    ),
+    availableAssets: formatTokenAmount(
+      availableAssetsValue,
+      assetSymbol === "—" ? undefined : assetSymbol,
+      assetDecimals,
+    ),
   };
 
   const position: VaultDetailPosition = {
@@ -806,15 +907,20 @@ export function useVaultDetailModel(
       undefined,
       vaultDecimals,
     ),
-    withdrawableAssets: formatTokenAmount(
+    withdrawableAssets: formatTokenAmountFloor(
       maxWithdrawValue,
       assetSymbol === "—" ? undefined : assetSymbol,
       assetDecimals,
     ),
-    redeemableShares: formatTokenAmount(
+    redeemableShares: formatTokenAmountFloor(
       maxRedeemValue,
       undefined,
       vaultDecimals,
+    ),
+    shareValue: formatTokenAmount(
+      shareValueTyped,
+      assetSymbol === "—" ? undefined : assetSymbol,
+      assetDecimals,
     ),
   };
 
@@ -837,8 +943,14 @@ export function useVaultDetailModel(
     isSubmitting,
     depositAssetBalance,
     hasDepositAssetBalance,
+    hasWithdrawableAssets,
+    hasRedeemableShares,
     isVaultGuardian,
     canShowGuardianOperations,
+    maxWithdrawInputValue,
+    maxRedeemInputValue,
+    isWithdrawAmountWithinLimit,
+    isRedeemAmountWithinLimit,
     deposit,
     mint,
     withdraw,

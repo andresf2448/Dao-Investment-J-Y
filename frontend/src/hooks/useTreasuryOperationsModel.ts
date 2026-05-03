@@ -213,7 +213,7 @@ export function useTreasuryOperationsModel(): TreasuryOperationsModel {
     tokenAddress,
     setTokenAddress,
     selectedToken,
-    setSelectedToken: (token: TreasuryOperationToken) => {
+    setSelectedToken: () => {
       setTokenAddress("");
     },
     amount,

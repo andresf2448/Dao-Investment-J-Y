@@ -1,5 +1,7 @@
 import { formatUnits } from "viem";
 
+export const DEFAULT_TOKEN_DECIMALS = 18;
+
 export function formatExactTokenAmount(
   value: bigint,
   decimals: number,
@@ -11,4 +13,24 @@ export function formatExactTokenAmount(
     : exactAmount;
 
   return symbol ? `${normalizedAmount} ${symbol}` : normalizedAmount;
+}
+
+export function normalizeTokenDecimals(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
 }

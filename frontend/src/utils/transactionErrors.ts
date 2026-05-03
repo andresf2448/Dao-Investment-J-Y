@@ -107,6 +107,31 @@ function collectErrorNames(
   return [...names];
 }
 
+function collectErrorNamesFromMessages(rawMessages: string[]): string[] {
+  const names = new Set<string>();
+  const patterns = [
+    /(?:^|\n)\s*Error:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/g,
+    /(?:^|\n)\s*Caused by:\s*.*?Error:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/g,
+    /(?:^|\n)\s*Reason:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/g,
+  ];
+
+  for (const message of rawMessages) {
+    for (const pattern of patterns) {
+      pattern.lastIndex = 0;
+      let match: RegExpExecArray | null;
+
+      while ((match = pattern.exec(message)) !== null) {
+        const name = match[1]?.trim();
+        if (name) {
+          names.add(name);
+        }
+      }
+    }
+  }
+
+  return [...names];
+}
+
 function normalizeMessage(message: string): string {
   return message.trim().toLowerCase();
 }
@@ -347,6 +372,74 @@ function matchKnownContractErrorNames(
     };
   }
 
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "erc4626exceededmaxredeem",
+        "erc4626_exceeded_max_redeem",
+        "exceededmaxredeem",
+      ]),
+    )
+  ) {
+    return {
+      title: "Redeem amount exceeds your limit",
+      message:
+        "You are trying to redeem more shares than are currently redeemable for this wallet. Reduce the amount or wait until more shares become available.",
+      code: "contract_revert",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "erc4626exceededmaxwithdraw",
+        "erc4626_exceeded_max_withdraw",
+        "exceededmaxwithdraw",
+      ]),
+    )
+  ) {
+    return {
+      title: "Withdraw amount exceeds your limit",
+      message:
+        "You are trying to withdraw more assets than are currently available for this wallet. Reduce the amount or wait until more assets become withdrawable.",
+      code: "contract_revert",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "erc4626exceededmaxdeposit",
+        "erc4626_exceeded_max_deposit",
+        "exceededmaxdeposit",
+      ]),
+    )
+  ) {
+    return {
+      title: "Deposit amount exceeds the vault limit",
+      message:
+        "The vault is not accepting that deposit amount right now. Reduce the amount and try again.",
+      code: "contract_revert",
+    };
+  }
+
+  if (
+    normalizedNames.some((name) =>
+      hasAnyPattern(name, [
+        "erc4626exceededmaxmint",
+        "erc4626_exceeded_max_mint",
+        "exceededmaxmint",
+      ]),
+    )
+  ) {
+    return {
+      title: "Mint amount exceeds the vault limit",
+      message:
+        "The vault is not accepting that mint amount right now. Reduce the amount and try again.",
+      code: "contract_revert",
+    };
+  }
+
   return undefined;
 }
 
@@ -542,7 +635,9 @@ export function getTransactionError(error: unknown): TransactionErrorDisplay {
   }
 
   const errorNames = collectErrorNames(error);
-  const protocolRevert = matchProtocolRevert(rawMessages, errorNames);
+  const messageErrorNames = collectErrorNamesFromMessages(rawMessages);
+  const allErrorNames = [...new Set([...errorNames, ...messageErrorNames])];
+  const protocolRevert = matchProtocolRevert(rawMessages, allErrorNames);
   if (protocolRevert) {
     return {
       ...protocolRevert,

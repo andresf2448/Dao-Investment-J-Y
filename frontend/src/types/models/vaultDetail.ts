@@ -10,6 +10,8 @@ export interface VaultDetailData {
   registeredAt: string;
   decimals: number;
   totalAssets: string;
+  investedAssets: string;
+  availableAssets: string;
 }
 
 export interface VaultDetailPosition {
@@ -17,6 +19,7 @@ export interface VaultDetailPosition {
   mintedShares: string;
   withdrawableAssets: string;
   redeemableShares: string;
+  shareValue: string;
 }
 
 export interface VaultDetailControls {
@@ -54,8 +57,14 @@ export interface VaultDetailModel {
   isSubmitting: boolean;
   depositAssetBalance: string;
   hasDepositAssetBalance: boolean;
+  hasWithdrawableAssets: boolean;
+  hasRedeemableShares: boolean;
   isVaultGuardian: boolean;
   canShowGuardianOperations: boolean;
+  maxWithdrawInputValue: string;
+  maxRedeemInputValue: string;
+  isWithdrawAmountWithinLimit: (amount: string) => boolean;
+  isRedeemAmountWithinLimit: (amount: string) => boolean;
   deposit: (amount: string) => Promise<boolean>;
   mint: (amount: string) => Promise<boolean>;
   withdraw: (amount: string) => Promise<boolean>;

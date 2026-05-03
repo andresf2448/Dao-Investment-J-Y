@@ -2,6 +2,7 @@ import type { ProtocolCapabilities } from "@/types/capabilities";
 
 export type OperationsToggleStatus = "enabled" | "paused";
 export type InfrastructureState = "linked" | "partial" | "unconfigured";
+export type WiringStatusTone = "success" | "warning" | "neutral" | "danger";
 
 export interface OperationsStatus {
   vaultCreation: OperationsToggleStatus;
@@ -57,6 +58,7 @@ export interface OperationsWiringForm {
   setAdapterStrategyInput: (value: string) => void;
   adapterStrategyError?: string;
   adapterStrategyStatusMessage?: string;
+  adapterStrategyStatusTone?: WiringStatusTone;
   canSubmitAdapterStrategy: boolean;
   adapterStrategyAllowed: boolean;
   wiringPermissionMessage?: string;

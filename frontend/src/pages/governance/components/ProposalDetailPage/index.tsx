@@ -25,7 +25,6 @@ export default function ProposalDetailPage() {
     abstain,
     queueProposal,
     executeProposal,
-    isSubmitting,
   } = useProposalDetailModel(proposalId);
   const hasVotingPower = governanceUser.votingPowerValue > 0n;
   const canCastVote = canVote && hasVotingPower;

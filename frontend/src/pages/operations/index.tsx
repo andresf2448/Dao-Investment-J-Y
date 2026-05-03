@@ -1,6 +1,6 @@
 import { Link2, Layers3, Settings, ShieldAlert } from "lucide-react";
 import { useOperationsModel } from "@/hooks/useOperationsModel";
-import { HeroMetric, MetricCard } from "@/components/shared";
+import { AlertCallout, HeroMetric, MetricCard } from "@/components/shared";
 import { OperationRow, WiringCard } from "./components";
 import {
   formatInfrastructureState,
@@ -27,6 +27,12 @@ export default function OperationsPage() {
     status.vaultDeposits === "paused"
       ? "Vault deposits are currently paused across vault infrastructure."
       : undefined;
+  const protocolControlsWarning = !capabilities.canCreateProposal
+    ? "Governance Required"
+    : undefined;
+  const infrastructureWiringWarning = !capabilities.canCreateProposal
+    ? "Governance Required"
+    : undefined;
 
   return (
     <div className="space-y-8">
@@ -94,7 +100,12 @@ export default function OperationsPage() {
 
       <section className="grid gap-6 xl:grid-cols-[1fr,1fr]">
         <div className="card">
-          <div className="card-header">Protocol Controls</div>
+          <div className="card-header flex items-center justify-between gap-4">
+            <span>Protocol Controls</span>
+            {protocolControlsWarning ? (
+              <AlertCallout title={protocolControlsWarning} />
+            ) : null}
+          </div>
 
           <div className="card-content space-y-4">
             <OperationRow
@@ -109,11 +120,6 @@ export default function OperationsPage() {
               disableSecondary={
                 (!capabilities.canResumeVaultCreation && !capabilities.canCreateProposal) ||
                 status.vaultCreation === "enabled"
-              }
-              secondaryActionMessage={
-                !capabilities.canCreateProposal
-                  ? "You need enough governance voting power to create a resume proposal."
-                  : undefined
               }
               statusMessage={vaultCreationStatusMessage}
               onPrimaryAction={actions.pauseVaultCreation}
@@ -132,42 +138,10 @@ export default function OperationsPage() {
                 (!capabilities.canResumeVaultDeposits && !capabilities.canCreateProposal) ||
                 status.vaultDeposits === "enabled"
               }
-              secondaryActionMessage={
-                !capabilities.canCreateProposal
-                  ? "You need enough governance voting power to create a resume proposal."
-                  : undefined
-              }
               statusMessage={vaultDepositsStatusMessage}
               onPrimaryAction={actions.pauseVaultDeposits}
               onSecondaryAction={actions.resumeVaultDeposits}
             />
-
-            {!capabilities.canPauseVaultCreation &&
-            !capabilities.canResumeVaultCreation &&
-            !capabilities.canPauseVaultDeposits &&
-            !capabilities.canResumeVaultDeposits ? (
-              <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-4">
-                <p className="text-sm font-medium text-yellow-800">
-                  Controls Protected
-                </p>
-                <p className="mt-1 text-sm leading-6 text-yellow-700">
-                  Pause buttons remain blocked until the connected wallet has
-                  emergency permissions. Proposal-based actions also require
-                  sufficient governance voting power.
-                </p>
-              </div>
-            ) : null}
-
-            <div className="rounded-2xl border border-border bg-yellow-50 px-4 py-4">
-              <p className="text-sm font-medium text-yellow-800">
-                Responsibility Separation
-              </p>
-              <p className="mt-1 text-sm leading-6 text-yellow-700">
-                Emergency operators and managers do not share the same operational
-                actions. Pauses can be triggered here, while reactivations and
-                configuration updates are submitted as governance proposals.
-              </p>
-            </div>
 
           </div>
         </div>
@@ -203,11 +177,6 @@ export default function OperationsPage() {
                   {assetSupport.supportedVaultAssetError}
                 </p>
               ) : null}
-              {assetSupport.assetSupportPermissionMessage ? (
-                <p className="mt-2 text-sm text-text-secondary">
-                  {assetSupport.assetSupportPermissionMessage}
-                </p>
-              ) : null}
             </div>
 
             <div>
@@ -237,11 +206,6 @@ export default function OperationsPage() {
                   {assetSupport.supportedGenesisTokenError}
                 </p>
               ) : null}
-              {assetSupport.assetSupportPermissionMessage ? (
-                <p className="mt-2 text-sm text-text-secondary">
-                  {assetSupport.assetSupportPermissionMessage}
-                </p>
-              ) : null}
             </div>
 
             <div className="rounded-2xl bg-gray-50 px-4 py-4">
@@ -258,7 +222,12 @@ export default function OperationsPage() {
       </section>
 
       <section className="card">
-        <div className="card-header">Infrastructure Wiring</div>
+        <div className="card-header flex items-center justify-between gap-4">
+          <span>Infrastructure Wiring</span>
+          {infrastructureWiringWarning ? (
+            <AlertCallout title={infrastructureWiringWarning} />
+          ) : null}
+        </div>
 
         <div className="card-content grid gap-5 lg:grid-cols-2">
           <WiringCard
@@ -271,7 +240,7 @@ export default function OperationsPage() {
             actionDisabled={
               !capabilities.canCreateProposal || !wiringForm.canSubmitFactoryRouter
             }
-            error={wiringForm.factoryRouterError ?? wiringForm.wiringPermissionMessage}
+            error={wiringForm.factoryRouterError}
             onAction={actions.setFactoryRouter}
           />
           <WiringCard
@@ -284,7 +253,7 @@ export default function OperationsPage() {
             actionDisabled={
               !capabilities.canCreateProposal || !wiringForm.canSubmitFactoryCore
             }
-            error={wiringForm.factoryCoreError ?? wiringForm.wiringPermissionMessage}
+            error={wiringForm.factoryCoreError}
             onAction={actions.setFactoryCore}
           />
           <WiringCard
@@ -298,10 +267,7 @@ export default function OperationsPage() {
               !capabilities.canCreateProposal ||
               !wiringForm.canSubmitGuardianAdministrator
             }
-            error={
-              wiringForm.guardianAdministratorError ??
-              wiringForm.wiringPermissionMessage
-            }
+            error={wiringForm.guardianAdministratorError}
             onAction={actions.setGuardianAdministrator}
           />
           <WiringCard
@@ -314,7 +280,7 @@ export default function OperationsPage() {
             actionDisabled={
               !capabilities.canCreateProposal || !wiringForm.canSubmitVaultRegistry
             }
-            error={wiringForm.vaultRegistryError ?? wiringForm.wiringPermissionMessage}
+            error={wiringForm.vaultRegistryError}
             onAction={actions.setVaultRegistry}
           />
           <WiringCard
@@ -328,11 +294,8 @@ export default function OperationsPage() {
               !capabilities.canCreateProposal ||
               !wiringForm.canSubmitAdapterStrategy
             }
-            error={
-              wiringForm.adapterStrategyError ??
-              wiringForm.wiringPermissionMessage ??
-              wiringForm.adapterStrategyStatusMessage
-            }
+            statusMessage={wiringForm.adapterStrategyStatusMessage}
+            statusTone={wiringForm.adapterStrategyStatusTone}
             onAction={actions.setAdapterStrategy}
           />
           <WiringCard
@@ -346,10 +309,7 @@ export default function OperationsPage() {
               !capabilities.canCreateProposal ||
               !wiringForm.canSubmitTreasuryProtocolCore
             }
-            error={
-              wiringForm.treasuryProtocolCoreError ??
-              wiringForm.wiringPermissionMessage
-            }
+            error={wiringForm.treasuryProtocolCoreError}
             onAction={actions.setTreasuryProtocolCore}
           />
         </div>

@@ -1,6 +1,7 @@
 import { PROTOCOL_ADDRESSES, type ProtocolContract } from "./protocol";
 
 export { PROTOCOL_ADDRESSES, type ProtocolContract };
+export { VAULT_FACTORY_ADDRESSES } from "./vaultFactory";
 
 export const CHAIN_ID = {
   MAINNET: 1,

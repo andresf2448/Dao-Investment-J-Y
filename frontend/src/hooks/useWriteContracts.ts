@@ -30,7 +30,7 @@ export type ExecuteWriteParams = ContractReferenceWithOptionalAddress & {
   options?: ExecuteOptions;
 };
 
-const useWriteContracts = () => {
+export default function useWriteContracts() {
   const chainId = useChainId();
   const connection = useConnection();
   const writeContract = useWriteContract();
@@ -95,6 +95,4 @@ const useWriteContracts = () => {
   return {
     executeWrite,
   };
-};
-
-export default useWriteContracts;
+}

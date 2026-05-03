@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Check,
@@ -36,9 +36,9 @@ export default function VaultDetailPage() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [redeemSharesAmount, setRedeemSharesAmount] = useState("");
   const [copiedAdapter, setCopiedAdapter] = useState<string | null>(null);
-  const [strategyAllocations, setStrategyAllocations] = useState<StrategyAllocationRow[]>([
-    createStrategyAllocationRow(),
-  ]);
+  const [strategyAllocations, setStrategyAllocations] = useState<
+    StrategyAllocationRow[]
+  >([createStrategyAllocationRow()]);
   const {
     vault,
     position,
@@ -51,7 +51,13 @@ export default function VaultDetailPage() {
     strategyExecutionReady,
     depositAssetBalance,
     hasDepositAssetBalance,
+    hasWithdrawableAssets,
+    hasRedeemableShares,
     canShowGuardianOperations,
+    maxWithdrawInputValue,
+    maxRedeemInputValue,
+    isWithdrawAmountWithinLimit,
+    isRedeemAmountWithinLimit,
     deposit,
     mint,
     withdraw,
@@ -70,22 +76,35 @@ export default function VaultDetailPage() {
     ? "Execution is available at vault level while risk controls remain enabled."
     : "Execution is blocked by risk controls or inactive vault status.";
   const isPositiveNumber = (value: string) =>
-    value.trim() !== "" &&
-    Number.isFinite(Number(value)) &&
-    Number(value) > 0;
+    value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) > 0;
   const canDeposit =
     controls.depositsEnabled &&
     isPositiveNumber(depositAmount) &&
     hasDepositAssetBalance;
-  const canMint = controls.depositsEnabled && isPositiveNumber(mintSharesAmount);
-  const canWithdraw = isPositiveNumber(withdrawAmount);
-  const canRedeem = isPositiveNumber(redeemSharesAmount);
+  const canMint =
+    controls.depositsEnabled && isPositiveNumber(mintSharesAmount);
+  const canWithdraw =
+    isPositiveNumber(withdrawAmount) &&
+    hasWithdrawableAssets &&
+    isWithdrawAmountWithinLimit(withdrawAmount);
+  const canRedeem =
+    isPositiveNumber(redeemSharesAmount) &&
+    hasRedeemableShares &&
+    isRedeemAmountWithinLimit(redeemSharesAmount);
+  const withdrawExceedsLimit =
+    isPositiveNumber(withdrawAmount) &&
+    hasWithdrawableAssets &&
+    !isWithdrawAmountWithinLimit(withdrawAmount);
+  const redeemExceedsLimit =
+    isPositiveNumber(redeemSharesAmount) &&
+    hasRedeemableShares &&
+    !isRedeemAmountWithinLimit(redeemSharesAmount);
   const depositAmountError =
     depositAmount.trim() !== "" && !isPositiveNumber(depositAmount)
       ? `Enter a valid ${vault.asset} amount greater than 0.`
       : depositAmount.trim() !== "" && !hasDepositAssetBalance
-      ? `You have no ${vault.asset} balance to deposit.`
-      : undefined;
+        ? `You have no ${vault.asset} balance to deposit.`
+        : undefined;
   const mintSharesAmountError =
     mintSharesAmount.trim() !== "" && !isPositiveNumber(mintSharesAmount)
       ? "Enter a valid share amount greater than 0."
@@ -93,11 +112,19 @@ export default function VaultDetailPage() {
   const withdrawAmountError =
     withdrawAmount.trim() !== "" && !isPositiveNumber(withdrawAmount)
       ? `Enter a valid ${vault.asset} amount greater than 0.`
-      : undefined;
+      : withdrawAmount.trim() !== "" && !hasWithdrawableAssets
+        ? "No withdrawable assets are available right now."
+        : withdrawExceedsLimit
+          ? `Amount exceeds your withdrawable ${vault.asset}. Use Max or enter a lower amount.`
+        : undefined;
   const redeemSharesAmountError =
     redeemSharesAmount.trim() !== "" && !isPositiveNumber(redeemSharesAmount)
       ? "Enter a valid share amount greater than 0."
-      : undefined;
+      : redeemSharesAmount.trim() !== "" && !hasRedeemableShares
+        ? "No redeemable shares are available right now."
+        : redeemExceedsLimit
+          ? "Amount exceeds your redeemable shares. Use Max or enter a lower amount."
+        : undefined;
   const strategyAllocationTotal = useMemo(
     () =>
       strategyAllocations.reduce((total, row) => {
@@ -127,10 +154,7 @@ export default function VaultDetailPage() {
   ] as const;
 
   const handleAddStrategyRow = () => {
-    setStrategyAllocations((rows) => [
-      ...rows,
-      createStrategyAllocationRow(),
-    ]);
+    setStrategyAllocations((rows) => [...rows, createStrategyAllocationRow()]);
   };
 
   const handleUpdateStrategyRow = (
@@ -189,6 +213,24 @@ export default function VaultDetailPage() {
     }
   };
 
+  useEffect(() => {
+    if (!hasWithdrawableAssets && withdrawAmount !== "") {
+      setWithdrawAmount("");
+    }
+  }, [hasWithdrawableAssets, withdrawAmount]);
+
+  const resetStrategyAllocations = () => {
+    setStrategyAllocations([createStrategyAllocationRow()]);
+  };
+
+  const handleExecuteStrategy = async (action: 0 | 1) => {
+    const executed = await executeStrategy(action);
+
+    if (executed) {
+      resetStrategyAllocations();
+    }
+  };
+
   return (
     <div className="space-y-8">
       <section className="rounded-3xl bg-gradient-to-r from-primary to-primary-light px-8 py-10 text-white shadow-card">
@@ -244,10 +286,18 @@ export default function VaultDetailPage() {
         <div className="card">
           <div className="card-header">Vault Summary</div>
 
-          <div className="card-content grid gap-4 sm:grid-cols-2">
+          <div className="card-content grid gap-4 md:grid-cols-3">
             <SummaryStat
-              label="Vault Total Assets"
+              label="Total Managed in Vault"
               value={vault.totalAssets}
+            />
+            <SummaryStat
+              label="Invested in Pools"
+              value={vault.investedAssets}
+            />
+            <SummaryStat
+              label="Available in Vault"
+              value={vault.availableAssets}
             />
           </div>
         </div>
@@ -307,10 +357,6 @@ export default function VaultDetailPage() {
               error={depositAmountError}
               inputMode="decimal"
             />
-            <div className="flex items-center justify-between text-sm text-text-secondary">
-              <span>Your balance</span>
-              <span>{depositAssetBalance}</span>
-            </div>
             <button
               className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canDeposit || isSubmitting}
@@ -334,7 +380,17 @@ export default function VaultDetailPage() {
             >
               Mint Shares
             </button>
-            {/* TODO: deshabilitar además por wallet/session si aplica */}
+            <div className="rounded-2xl border border-border bg-gray-50 px-4 py-4">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-text-secondary">
+                Your balance
+              </p>
+              <p className="mt-2 text-sm font-semibold text-text-primary">
+                {depositAssetBalance}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-text-secondary">
+                Available to deposit into this vault.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -349,11 +405,10 @@ export default function VaultDetailPage() {
               onChange={setWithdrawAmount}
               error={withdrawAmountError}
               inputMode="decimal"
+              actionLabel="Max"
+              onAction={() => setWithdrawAmount(maxWithdrawInputValue)}
+              actionDisabled={!hasWithdrawableAssets || isSubmitting}
             />
-            <div className="flex items-center justify-between text-sm text-text-secondary">
-              <span>Your balance</span>
-              <span>{depositAssetBalance}</span>
-            </div>
             <button
               className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canWithdraw || isSubmitting}
@@ -369,6 +424,9 @@ export default function VaultDetailPage() {
               onChange={setRedeemSharesAmount}
               error={redeemSharesAmountError}
               inputMode="decimal"
+              actionLabel="Max"
+              onAction={() => setRedeemSharesAmount(maxRedeemInputValue)}
+              actionDisabled={!hasRedeemableShares || isSubmitting}
             />
             <button
               className="btn-secondary w-full disabled:cursor-not-allowed disabled:opacity-50"
@@ -377,6 +435,79 @@ export default function VaultDetailPage() {
             >
               Redeem Shares
             </button>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="flex h-full min-h-[7.5rem] flex-col rounded-2xl border border-border bg-gray-50 px-4 py-4">
+                <div className="min-h-[3rem]">
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-text-secondary">
+                    Withdrawable assets
+                  </p>
+                </div>
+                <p className="mt-auto pt-2 text-lg font-semibold text-text-primary">
+                  {position.withdrawableAssets}
+                </p>
+              </div>
+              <div
+                className={`flex h-full min-h-[7.5rem] flex-col rounded-2xl border px-4 py-4 ${
+                  hasRedeemableShares
+                    ? "border-green-200 bg-green-50"
+                    : "border-yellow-200 bg-yellow-50"
+                }`}
+              >
+                <div className="min-h-[3rem]">
+                  <p
+                    className={`text-xs font-medium uppercase tracking-[0.16em] ${
+                      hasRedeemableShares
+                        ? "text-green-800"
+                        : "text-yellow-800"
+                    }`}
+                  >
+                    Redeemable now
+                  </p>
+                </div>
+                <p
+                  className={`mt-auto pt-2 text-lg font-semibold ${
+                    hasRedeemableShares ? "text-green-700" : "text-yellow-700"
+                  }`}
+                >
+                  {position.redeemableShares}
+                </p>
+              </div>
+              <div className="flex h-full min-h-[7.5rem] flex-col rounded-2xl border border-border bg-gray-50 px-4 py-4">
+                <div className="min-h-[3rem]">
+                  <p className="text-xs font-medium text-text-secondary">
+                    1 Share in USDTG
+                  </p>
+                </div>
+                <p className="mt-auto pt-2 text-lg font-semibold text-text-primary">
+                  {position.shareValue}
+                </p>
+              </div>
+            </div>
+            <div
+              className={`rounded-2xl border px-4 py-4 ${
+                hasRedeemableShares
+                  ? "border-green-200 bg-green-50"
+                  : "border-yellow-200 bg-yellow-50"
+              }`}
+            >
+              <p
+                className={`text-sm font-medium ${
+                  hasRedeemableShares ? "text-green-800" : "text-yellow-800"
+                }`}
+              >
+                {hasRedeemableShares
+                  ? "Redeem is available for this wallet."
+                  : "No redeemable shares are available right now."}
+              </p>
+              <p
+                className={`mt-1 text-sm leading-6 ${
+                  hasRedeemableShares ? "text-green-700" : "text-yellow-700"
+                }`}
+              >
+                You can redeem up to {position.redeemableShares} shares from
+                this vault when the asset and vault conditions allow it.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -502,7 +633,7 @@ export default function VaultDetailPage() {
                         />
                       </div>
 
-                      <div className="flex md:justify-end">
+                      <div className="flex md:justify-end md:pt-7">
                         <button
                           type="button"
                           onClick={() => handleRemoveStrategyRow(index)}
@@ -550,7 +681,7 @@ export default function VaultDetailPage() {
                   key={action}
                   className={`${className} w-full disabled:cursor-not-allowed disabled:opacity-50`}
                   disabled={!canExecuteStrategy}
-                  onClick={() => void executeStrategy(action)}
+                  onClick={() => void handleExecuteStrategy(action)}
                 >
                   {label}
                 </button>
