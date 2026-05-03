@@ -2,14 +2,6 @@
 pragma solidity ^0.8.33;
 
 interface IStrategyRouter {
-  function execute(
-    address adapter,
-    address vault,
-    address asset,
-    uint256 amountToInvest,
-    uint8 action
-  ) external;
-
   function executeMultiple(
     address vault,
     address asset,

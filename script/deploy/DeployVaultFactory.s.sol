@@ -19,7 +19,7 @@ contract DeployVaultFactory is Script {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;
-    address deployer = _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
+    _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
 
     if (_timeLock == address(0) || _vaultImpl == address(0) || _guardianAdmin == address(0) ||
         _vaultRegistry == address(0) || _strategyRouter == address(0) || _protocolCore == address(0)) {

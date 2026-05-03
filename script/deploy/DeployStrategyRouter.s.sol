@@ -12,7 +12,7 @@ contract DeployStrategyRouter is Script {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;
-    address deployer = _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
+    _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
 
     if (_timeLock == address(0) || _riskManager == address(0) || _vaultRegistry == address(0)) {
       console.log("Error: Dependencies address required");

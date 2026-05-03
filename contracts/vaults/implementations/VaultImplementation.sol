@@ -9,13 +9,13 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
 import {IProtocolCore} from "../../interfaces/core/IProtocolCore.sol";
 import {IStrategyRouter} from "../../interfaces/execution/IStrategyRouter.sol";
 import {IVaultStrategyExecutor} from "../../interfaces/vaults/IVaultStrategyExecutor.sol";
-import {CommonErrors} from "../../libraries/errors/CommonErrors.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {IMockAavePool} from "../../../test/interfaces/IMockAavePool.sol";
 import {IStrategyAdapter} from "../../interfaces/adapters/IStrategyAdapter.sol";
+import {CommonErrors} from "../../libraries/errors/CommonErrors.sol";
 
 contract VaultImplementation is
   Initializable,
@@ -29,6 +29,14 @@ contract VaultImplementation is
   using SafeERC20 for IERC20;
   using EnumerableSet for EnumerableSet.AddressSet;
 
+  uint16 public constant MAX_BPS = 10_000;
+
+  uint8 public constant INVEST_ACTION = 0;
+  uint8 public constant DIVEST_ACTION = 1;
+
+  bytes32 public constant GUARDIAN_ROLE = keccak256("GUARDIAN_ROLE");
+  bytes32 public constant STRATEGY_EXECUTOR_ROLE = keccak256("STRATEGY_EXECUTOR_ROLE");
+
   enum AdapterStatus {
     None,
     Active,
@@ -36,12 +44,9 @@ contract VaultImplementation is
   }
 
   struct AdapterAllocation {
-    uint256 percentage;
+    uint16 allocationBps;
     AdapterStatus status;
   }
-
-  bytes32 public constant GUARDIAN_ROLE = keccak256("GUARDIAN_ROLE");
-  bytes32 public constant STRATEGY_EXECUTOR_ROLE = keccak256("STRATEGY_EXECUTOR_ROLE");
 
   address public guardian;
   address public factory;
@@ -59,19 +64,23 @@ contract VaultImplementation is
     address router,
     address core
   );
+
   event RouterUpdated(address indexed oldRouter, address indexed newRouter);
   event CoreUpdated(address indexed oldCore, address indexed newCore);
+
   event StrategyExecutionRequest(
     address indexed guardian,
     address[] adapters,
-    uint256[] percentages
+    uint256[] allocationBps
   );
+
   event RouterCallExecuted(
     address indexed target,
     uint256 value,
     bytes data,
     bytes result
   );
+
   event RouterTokenApprovalSet(
     address indexed token,
     address indexed spender,
@@ -80,10 +89,9 @@ contract VaultImplementation is
 
   error VaultImplementation__NotFactory();
   error VaultImplementation__DepositsPaused();
-  error VaultImplementation__NotRouter();
   error VaultImplementation__ExternalCallFailed();
   error VaultImplementation__InvalidStrategyAllocation();
-  error VaultImplementation__duplicatedAdapter();
+  error VaultImplementation__DuplicatedAdapter();
   error VaultImplementation__InvalidPercentage();
 
   constructor() {
@@ -100,7 +108,7 @@ contract VaultImplementation is
     address router_,
     address core_
   ) external initializer {
-    if(
+    if (
       asset_ == address(0) ||
       guardian_ == address(0) ||
       admin_ == address(0) ||
@@ -111,7 +119,7 @@ contract VaultImplementation is
       revert CommonErrors.ZeroAddress();
     }
 
-    if(msg.sender != factory_) revert VaultImplementation__NotFactory();
+    if (msg.sender != factory_) revert VaultImplementation__NotFactory();
 
     __ERC20_init(name_, symbol_);
     __ERC4626_init(IERC20(asset_));
@@ -127,20 +135,14 @@ contract VaultImplementation is
     _grantRole(GUARDIAN_ROLE, guardian_);
     _grantRole(STRATEGY_EXECUTOR_ROLE, router_);
 
-    emit VaultInitialized(
-      asset_,
-      guardian_,
-      admin_,
-      factory_,
-      router_,
-      core_
-    );
+    emit VaultInitialized(asset_, guardian_, admin_, factory_, router_, core_);
   }
 
   function setRouter(address newRouter) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    if(newRouter == address(0)) revert CommonErrors.ZeroAddress();
+    if (newRouter == address(0)) revert CommonErrors.ZeroAddress();
 
     address oldRouter = router;
+
     _revokeRole(STRATEGY_EXECUTOR_ROLE, oldRouter);
     router = newRouter;
     _grantRole(STRATEGY_EXECUTOR_ROLE, newRouter);
@@ -149,7 +151,7 @@ contract VaultImplementation is
   }
 
   function setCore(address newCore) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    if(newCore == address(0)) revert CommonErrors.ZeroAddress();
+    if (newCore == address(0)) revert CommonErrors.ZeroAddress();
 
     address oldCore = core;
     core = newCore;
@@ -165,30 +167,38 @@ contract VaultImplementation is
     _unpause();
   }
 
-  function deposit(uint256 assets, address receiver)
+  function deposit(
+    uint256 assets,
+    address receiver
+  )
     public
     override
     whenNotPaused
     nonReentrant
-    returns(uint256 shares)
+    returns (uint256 shares)
   {
-    if(IProtocolCore(core).isVaultDepositsPaused())
+    if (IProtocolCore(core).isVaultDepositsPaused()) {
       revert VaultImplementation__DepositsPaused();
+    }
 
-    return super.deposit(assets, receiver);
+    shares = super.deposit(assets, receiver);
   }
 
-  function mint(uint256 shares, address receiver)
+  function mint(
+    uint256 shares,
+    address receiver
+  )
     public
     override
     whenNotPaused
     nonReentrant
-    returns(uint256 assets)
+    returns (uint256 assets)
   {
-    if (IProtocolCore(core).isVaultDepositsPaused())
+    if (IProtocolCore(core).isVaultDepositsPaused()) {
       revert VaultImplementation__DepositsPaused();
+    }
 
-    return super.mint(shares, receiver);
+    assets = super.mint(shares, receiver);
   }
 
   function withdraw(
@@ -200,9 +210,17 @@ contract VaultImplementation is
     override
     whenNotPaused
     nonReentrant
-    returns(uint256 shares)
+    returns (uint256 shares)
   {
-    return super.withdraw(assets, receiver, owner);
+    uint256 idleAssets = IERC20(asset()).balanceOf(address(this));
+
+    if (assets > idleAssets) {
+      _divestStrategy(assets - idleAssets);
+    }
+
+    shares = super.withdraw(assets, receiver, owner);
+
+    _rebalanceStrategies();
   }
 
   function redeem(
@@ -214,87 +232,157 @@ contract VaultImplementation is
     override
     whenNotPaused
     nonReentrant
-    returns(uint256 assets)
+    returns (uint256 assets)
   {
-    return super.redeem(shares, receiver, owner);
+    uint256 assetsNeeded = previewRedeem(shares);
+    uint256 idleAssets = IERC20(asset()).balanceOf(address(this));
+
+    if (assetsNeeded > idleAssets) {
+      _divestStrategy(assetsNeeded - idleAssets);
+    }
+
+    assets = super.redeem(shares, receiver, owner);
+
+    _rebalanceStrategies();
   }
 
-  function divestStrategy() external onlyRole(GUARDIAN_ROLE) whenNotPaused {
-    if (_vaultActiveAdapters.length() == 0)
-      revert VaultImplementation__InvalidStrategyAllocation();
+  function totalAssets()
+    public
+    view
+    override
+    returns (uint256 total)
+  {
+    total = IERC20(asset()).balanceOf(address(this));
 
-    uint256 adaptersLength = _vaultActiveAdapters.length();
-    uint256[] memory balancesAdapters = new uint256[](_vaultActiveAdapters.length());
+    uint256 length = _vaultActiveAdapters.length();
 
-    for(uint256 i = 0; i < adaptersLength; i++) {
+    for (uint256 i = 0; i < length; i++) {
       address adapter = _vaultActiveAdapters.at(i);
-      address poolAdapter = IStrategyAdapter(adapter).poolAddress();
-
-      balancesAdapters[i] = IMockAavePool(poolAdapter).deposits(address(this), asset());
+      total += IStrategyAdapter(adapter).totalAssets(address(this), asset());
     }
-  
-    IStrategyRouter(router).divestMultiple(
-      address(this),
-      _vaultActiveAdapters.values(),
-      balancesAdapters
-    );
   }
 
   function executeStrategy(
     address[] calldata newAdapters,
-    uint256[] calldata newPercentages,
+    uint256[] calldata newAllocationBps,
     uint8 action
   ) external onlyRole(GUARDIAN_ROLE) whenNotPaused {
-    uint256 adaptersLength = newAdapters.length;
+    _executeStrategy(newAdapters, newAllocationBps, action);
+  }
 
-    if(adaptersLength == 0 || adaptersLength != newPercentages.length)
-      revert VaultImplementation__InvalidStrategyAllocation();
+  function divestStrategy() external onlyRole(GUARDIAN_ROLE) whenNotPaused {
+    _divestAllStrategies();
+  }
 
-    uint256 vaultActiveAdaptersLength = _vaultActiveAdapters.length();
+  function executeFromRouter(
+    address target,
+    uint256 value,
+    bytes calldata data
+  )
+    external
+    override
+    onlyRole(STRATEGY_EXECUTOR_ROLE)
+    returns (bytes memory result)
+  {
+    if (target == address(0)) revert CommonErrors.ZeroAddress();
 
-    if(vaultActiveAdaptersLength > 0) {
+    (bool success, bytes memory returndata) = target.call{value: value}(data);
 
-      for(uint256 i = 0; i < vaultActiveAdaptersLength; i++) {
-        address activeAdapter = _vaultActiveAdapters.at(i);
-        listAdapters[activeAdapter].status = AdapterStatus.Retired;
-
-        _vaultActiveAdapters.remove(activeAdapter);
-      }
+    if (!success) {
+      _revertWithReturnData(returndata);
     }
 
-    uint256 totalPercentage = 0;
+    emit RouterCallExecuted(target, value, data, returndata);
 
-    for(uint256 i = 0; i < adaptersLength; i++) {
+    return returndata;
+  }
+
+  function approveTokenFromRouter(
+    address token,
+    address spender,
+    uint256 amount
+  ) external override onlyRole(STRATEGY_EXECUTOR_ROLE) {
+    if (token == address(0) || spender == address(0)) {
+      revert CommonErrors.ZeroAddress();
+    }
+
+    IERC20(token).forceApprove(spender, amount);
+
+    emit RouterTokenApprovalSet(token, spender, amount);
+  }
+
+  function getActiveAdapters() external view returns (address[] memory) {
+    return _vaultActiveAdapters.values();
+  }
+
+  function decimals()
+    public
+    view
+    override(ERC20Upgradeable, ERC4626Upgradeable)
+    returns (uint8)
+  {
+    return ERC20Upgradeable.decimals();
+  }
+
+  function supportsInterface(
+    bytes4 interfaceId
+  )
+    public
+    view
+    override(AccessControlUpgradeable)
+    returns (bool)
+  {
+    return super.supportsInterface(interfaceId);
+  }
+
+  function _executeStrategy(
+    address[] memory newAdapters,
+    uint256[] memory newAllocationBps,
+    uint8 action
+  ) internal {
+    uint256 adaptersLength = newAdapters.length;
+
+    if (adaptersLength == 0 || adaptersLength != newAllocationBps.length) {
+      revert VaultImplementation__InvalidStrategyAllocation();
+    }
+
+    _clearActiveAdapters();
+
+    uint256 totalBps;
+
+    for (uint256 i = 0; i < adaptersLength; i++) {
       address adapter = newAdapters[i];
-      uint256 percentage = newPercentages[i];
+      uint256 allocationBps = newAllocationBps[i];
 
-      if(adapter == address(0) || percentage == 0)
+      if (adapter == address(0) || allocationBps == 0 || allocationBps > MAX_BPS) {
         revert VaultImplementation__InvalidStrategyAllocation();
+      }
+
+      totalBps += allocationBps;
+
+      if (totalBps > MAX_BPS) {
+        revert VaultImplementation__InvalidPercentage();
+      }
+
+      if (!_vaultActiveAdapters.add(adapter)) {
+        revert VaultImplementation__DuplicatedAdapter();
+      }
 
       listAdapters[adapter] = AdapterAllocation({
-        percentage: percentage,
+        allocationBps: uint16(allocationBps),
         status: AdapterStatus.Active
       });
 
-      if(_vaultActiveAdapters.contains(adapter))
-        revert VaultImplementation__duplicatedAdapter();
-
-      _vaultActiveAdapters.add(adapter);
-      _giveAdapterRole(adapter);
-
-      totalPercentage += newPercentages[i];
+      _grantRole(STRATEGY_EXECUTOR_ROLE, adapter);
     }
 
-    if(totalPercentage != 100)
-      revert VaultImplementation__InvalidPercentage();
+    emit StrategyExecutionRequest(msg.sender, newAdapters, newAllocationBps);
 
-    emit StrategyExecutionRequest(msg.sender, newAdapters, newPercentages);
-
-    uint256 totalAssets = totalAssets();
+    uint256 idleAssets = IERC20(asset()).balanceOf(address(this));
     uint256[] memory amountsToInvest = new uint256[](adaptersLength);
 
-    for(uint256 i = 0; i < adaptersLength; i++) {
-      amountsToInvest[i] = (totalAssets * newPercentages[i]) / 100;
+    for (uint256 i = 0; i < adaptersLength; i++) {
+      amountsToInvest[i] = (idleAssets * newAllocationBps[i]) / MAX_BPS;
     }
 
     IStrategyRouter(router).executeMultiple(
@@ -306,60 +394,128 @@ contract VaultImplementation is
     );
   }
 
-  function executeFromRouter(
-    address target,
-    uint256 value,
-    bytes calldata data
-  )
-    external
-    override
-    onlyRole(STRATEGY_EXECUTOR_ROLE)
-    returns(bytes memory result)
-  {
-    if(target == address(0))
-      revert CommonErrors.ZeroAddress();
+  function _rebalanceStrategies() internal {
+    uint256 length = _vaultActiveAdapters.length();
 
-    (bool success, bytes memory returndata) = target.call{value: value}(data);
-    if(!success) revert VaultImplementation__ExternalCallFailed();
+    if (length == 0) return;
 
-    emit RouterCallExecuted(target, value, data, returndata);
-    return returndata;
+    uint256 idleAssets = IERC20(asset()).balanceOf(address(this));
+
+    if (idleAssets == 0) return;
+
+    address[] memory adapters = _vaultActiveAdapters.values();
+    uint256[] memory allocationBps = _getAllocationBps();
+
+    uint256[] memory amountsToInvest = new uint256[](length);
+
+    for (uint256 i = 0; i < length; i++) {
+      amountsToInvest[i] = (idleAssets * allocationBps[i]) / MAX_BPS;
+    }
+
+    IStrategyRouter(router).executeMultiple(
+      address(this),
+      asset(),
+      adapters,
+      amountsToInvest,
+      INVEST_ACTION
+    );
   }
 
-  function approveTokenFromRouter(
-    address token,
-    address spender,
-    uint256 amount
-  ) external override onlyRole(STRATEGY_EXECUTOR_ROLE) {
-    if(token == address(0) || spender == address(0))
-      revert CommonErrors.ZeroAddress();
+  function _divestStrategy(uint256 amountNeeded) internal {
+    uint256 length = _vaultActiveAdapters.length();
 
-    IERC20(token).forceApprove(spender, amount);
-    emit RouterTokenApprovalSet(token, spender, amount);
+    if (length == 0) {
+      revert VaultImplementation__InvalidStrategyAllocation();
+    }
+
+    address[] memory adapters = _vaultActiveAdapters.values();
+    uint256[] memory amountsToDivest = new uint256[](length);
+
+    uint256 remaining = amountNeeded;
+
+    for (uint256 i = 0; i < length; i++) {
+      address adapter = adapters[i];
+
+      uint256 deployed = IStrategyAdapter(adapter).totalAssets(
+        address(this),
+        asset()
+      );
+
+      if (deployed == 0) continue;
+
+      uint256 amount = deployed < remaining ? deployed : remaining;
+
+      amountsToDivest[i] = amount;
+      remaining -= amount;
+
+      if (remaining == 0) break;
+    }
+
+    if (remaining != 0) {
+      revert VaultImplementation__InvalidStrategyAllocation();
+    }
+
+    IStrategyRouter(router).divestMultiple(
+      address(this),
+      adapters,
+      amountsToDivest
+    );
   }
 
-  function decimals()
-    public
-    view
-    override(ERC20Upgradeable, ERC4626Upgradeable)
-    returns(uint8)
-  {
-    return ERC20Upgradeable.decimals();
+  function _divestAllStrategies() internal {
+    uint256 length = _vaultActiveAdapters.length();
+
+    if (length == 0) {
+      revert VaultImplementation__InvalidStrategyAllocation();
+    }
+
+    address[] memory adapters = _vaultActiveAdapters.values();
+    uint256[] memory amountsToDivest = new uint256[](length);
+
+    for (uint256 i = 0; i < length; i++) {
+      amountsToDivest[i] = IStrategyAdapter(adapters[i]).totalAssets(
+        address(this),
+        asset()
+      );
+    }
+
+    IStrategyRouter(router).divestMultiple(
+      address(this),
+      adapters,
+      amountsToDivest
+    );
   }
 
-  function supportsInterface(bytes4 interfaceId)
-    public
-    view
-    override(AccessControlUpgradeable)
-    returns(bool)
-  {
-    return super.supportsInterface(interfaceId);
+  function _clearActiveAdapters() internal {
+    uint256 length = _vaultActiveAdapters.length();
+
+    for (uint256 i = length; i > 0; i--) {
+      address adapter = _vaultActiveAdapters.at(i - 1);
+
+      listAdapters[adapter].status = AdapterStatus.Retired;
+      listAdapters[adapter].allocationBps = 0;
+
+      _vaultActiveAdapters.remove(adapter);
+    }
   }
 
-  function _giveAdapterRole(address adapter) internal {
-    if(adapter == address(0))
-      revert CommonErrors.ZeroAddress();
+  function _getAllocationBps() internal view returns (uint256[] memory allocations) {
+    uint256 length = _vaultActiveAdapters.length();
+    allocations = new uint256[](length);
 
-    _grantRole(STRATEGY_EXECUTOR_ROLE, adapter);
+    for (uint256 i = 0; i < length; i++) {
+      address adapter = _vaultActiveAdapters.at(i);
+      allocations[i] = listAdapters[adapter].allocationBps;
+    }
+  }
+
+  function _revertWithReturnData(bytes memory returndata) internal pure {
+    if (returndata.length == 0) {
+      revert VaultImplementation__ExternalCallFailed();
+    }
+
+    assembly {
+      revert(add(returndata, 32), mload(returndata))
+    }
   }
 }

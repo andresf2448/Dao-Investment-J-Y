@@ -10,7 +10,7 @@ contract DeployVaultImplementation is Script {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;
-    address deployer = _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
+    _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
 
     vm.startBroadcast(deployerPrivateKey);
       VaultImplementation vaultImplementation = new VaultImplementation();

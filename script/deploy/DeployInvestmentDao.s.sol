@@ -17,6 +17,7 @@ import {DeployVaultImplementation} from "./DeployVaultImplementation.s.sol";
 import {DeployGenesisBonding} from "./DeployGenesisBonding.s.sol";
 import {DeployVaultFactory} from "./DeployVaultFactory.s.sol";
 import {DeployAaveV3Adapter} from "./DeployAaveV3Adapter.s.sol";
+import {DeployCompoundV3Adapter} from "./DeployCompoundV3Adapter.s.sol";
 import {DeployMocks} from "./DeployMocks.s.sol";
 import {TimeLock} from "../../contracts/governance/TimeLock.sol";
 import {DaoGovernor} from "../../contracts/governance/DaoGovernor.sol";
@@ -33,12 +34,18 @@ contract DeployInvestmentDao is Script {
     // Deploy mocks for anvil network
     if (block.chainid == 31337) { // Anvil chain ID
       DeployMocks deployMocks = new DeployMocks();
-      (address mockERC20, address mockAavePool, address mockV3Aggregator) = deployMocks.run();
+      (
+        address mockERC20,
+        address mockAavePool,
+        address mockCompoundComet,
+        address mockV3Aggregator
+      ) = deployMocks.run();
 
       // Update network config with deployed mock addresses
       networkConfig.allowedGenesisTokens[0] = mockERC20;
       networkConfig.allowedVaultToken = mockERC20;
       networkConfig.aavePool = mockAavePool;
+      networkConfig.compoundComet = mockCompoundComet;
       networkConfig.mockV3Aggregator = mockV3Aggregator;
     }
 
@@ -56,7 +63,8 @@ contract DeployInvestmentDao is Script {
       address vaultImplementation,
       address genesisBonding,
       address vaultFactory,
-      address aaveV3Adapter
+      address aaveV3Adapter,
+      address compoundV3Adapter
     ) = deployContracts(config, deployer, networkConfig);
 
     generateDeploymentsJson(
@@ -74,7 +82,8 @@ contract DeployInvestmentDao is Script {
       vaultImplementation,
       genesisBonding,
       vaultFactory,
-      aaveV3Adapter
+      aaveV3Adapter,
+      compoundV3Adapter
     );
 
     createContractsSdkStructure();
@@ -85,6 +94,7 @@ contract DeployInvestmentDao is Script {
     returns (
       TimeLock,
       GovernanceToken,
+      address,
       address,
       address,
       address,
@@ -181,6 +191,10 @@ contract DeployInvestmentDao is Script {
     DeployAaveV3Adapter deployAaveV3Adapter = new DeployAaveV3Adapter();
     address aaveV3Adapter = address(deployAaveV3Adapter.run(config, strategyRouter, networkConfig.aavePool, deployer));
 
+    DeployCompoundV3Adapter deployCompoundV3Adapter = new DeployCompoundV3Adapter();
+    address compoundV3Adapter =
+      address(deployCompoundV3Adapter.run(config, strategyRouter, networkConfig.compoundComet, deployer));
+
     _configureProtocolDefaults(
       networkConfig,
       timeLock,
@@ -212,10 +226,12 @@ contract DeployInvestmentDao is Script {
     console.log("GenesisBonding: ", genesisBonding);
     console.log("VaultFactory: ", vaultFactory);
     console.log("AaveV3Adapter: ", aaveV3Adapter);
+    console.log("CompoundV3Adapter: ", compoundV3Adapter);
     console.log("================MOCK====================");
     if (block.chainid == 31337) {
       console.log("USDTGenesis: ", networkConfig.allowedGenesisTokens[0]);
       console.log("MockAavePool: ", networkConfig.aavePool);
+      console.log("MockCompoundComet: ", networkConfig.compoundComet);
     }
     console.log("========================================");
 
@@ -233,7 +249,8 @@ contract DeployInvestmentDao is Script {
       vaultImplementation,
       genesisBonding,
       vaultFactory,
-      aaveV3Adapter
+      aaveV3Adapter,
+      compoundV3Adapter
     );
   }
 
@@ -300,7 +317,8 @@ contract DeployInvestmentDao is Script {
     address vaultImplementation,
     address genesisBonding,
     address vaultFactory,
-    address aaveV3Adapter
+    address aaveV3Adapter,
+    address compoundV3Adapter
   ) internal {
     string memory deploymentsDir = "deployments";
 
@@ -313,6 +331,7 @@ contract DeployInvestmentDao is Script {
     string memory json = "deployment";
     vm.serializeUint(json, "chainId", block.chainid);
     vm.serializeAddress(json, "aavePool", networkConfig.aavePool);
+    vm.serializeAddress(json, "compoundComet", networkConfig.compoundComet);
     vm.serializeAddress(json, "timeLock", address(timeLock));
     vm.serializeAddress(json, "governanceToken", address(governanceToken));
     vm.serializeAddress(json, "treasury", treasury);
@@ -326,7 +345,8 @@ contract DeployInvestmentDao is Script {
     vm.serializeAddress(json, "vaultImplementation", vaultImplementation);
     vm.serializeAddress(json, "genesisBonding", genesisBonding);
     vm.serializeAddress(json, "vaultFactory", vaultFactory);
-    string memory finalJson = vm.serializeAddress(json, "aaveV3Adapter", aaveV3Adapter);
+    vm.serializeAddress(json, "aaveV3Adapter", aaveV3Adapter);
+    string memory finalJson = vm.serializeAddress(json, "compoundV3Adapter", compoundV3Adapter);
 
     vm.writeJson(finalJson, path);
 

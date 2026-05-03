@@ -15,7 +15,7 @@ contract DeployDaoGovernor is Script {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;
-    address deployer = _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
+    _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
     uint32 votingPeriod = block.chainid == 31337 ? ANVIL_VOTING_PERIOD : DEFAULT_VOTING_PERIOD;
 
     if (_governanceToken == address(0) || _timeLock == address(0)) {

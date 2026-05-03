@@ -7,8 +7,10 @@ import {TimeLock} from "../../contracts/governance/TimeLock.sol";
 import {DaoGovernor} from "../../contracts/governance/DaoGovernor.sol";
 import {GovernanceToken} from "../../contracts/governance/GovernanceToken.sol";
 import {ProtocolCore} from "../../contracts/core/ProtocolCore.sol";
+import {RiskManager} from "../../contracts/execution/RiskManager.sol";
 import {IERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {MockERC20} from "../../test/mocks/MockERC20.sol";
+import {MockV3AggregatorLocal} from "../../test/mocks/MockV3AggregatorLocal.sol";
 import {GenesisBonding} from "../../contracts/bootstrap/GenesisBonding.sol";
 import {GuardianAdministrator} from "../../contracts/guardians/GuardianAdministrator.sol";
 import {GuardianBondEscrow} from "../../contracts/guardians/GuardianBondEscrow.sol";
@@ -53,6 +55,9 @@ contract SeedLocal is Script {
     uint256 constant BLOCK_TIME = 12;
     uint8 constant VOTE_AGAINST = 0;
     uint8 constant VOTE_FOR = 1;
+    uint48 constant DEFAULT_HEARTBEAT = 1 days;
+    uint16 constant DEFAULT_DEPEG_MIN_BPS = 9_900;
+    uint16 constant DEFAULT_DEPEG_MAX_BPS = 10_100;
 
     bytes32 constant DEFAULT_ADMIN_ROLE = 0x00;
     bytes32 constant PROPOSER_ROLE = keccak256("PROPOSER_ROLE");
@@ -93,6 +98,7 @@ contract SeedLocal is Script {
         address vaultRegistry;
         address strategyRouter;
         address primaryToken;
+        address mockV3Aggregator;
     }
 
     // Full local cast of accounts used by the seed.
@@ -221,14 +227,17 @@ contract SeedLocal is Script {
             primaryToken: address(
                 GuardianBondEscrow(abi.decode(vm.parseJson(json, ".guardianBondEscrow"), (address)))
                     .guardianApplicationToken()
-            )
+            ),
+            mockV3Aggregator: _stringContains(json, "\"mockV3Aggregator\"")
+                ? abi.decode(vm.parseJson(json, ".mockV3Aggregator"), (address))
+                : address(0)
         });
     }
 
     // Build the complete set of actors used by the seed.
     // The admin guardian is not generated here; it must be the wallet configured in .env
     // so the developer can manually interact with the protocol after seeding.
-    function _buildParticipants(uint256 adminWalletPrivateKey) internal returns (Participants memory participants) {
+    function _buildParticipants(uint256 adminWalletPrivateKey) internal pure returns (Participants memory participants) {
         // These are the default Anvil accounts. The admin guardian stays on account (0),
         // while the remaining local actors use accounts (1) through (9).
         participants.guardian1 = _participantFromPrivateKey(ANVIL_ACCOUNT_1_PRIVATE_KEY, "guardian1");
@@ -355,9 +364,32 @@ contract SeedLocal is Script {
         allowedGenesisTokens[2] = usdcToken;
 
         vm.startBroadcast(adminWalletPrivateKey);
+        address priceFeed = contracts.mockV3Aggregator;
+        if (priceFeed == address(0)) {
+            priceFeed = address(new MockV3AggregatorLocal(8, 1e8));
+        }
+
         ProtocolCore(contracts.protocolCore).setSupportedGenesisTokens(allowedGenesisTokens);
         ProtocolCore(contracts.protocolCore).setSupportedVaultAsset(secondaryToken, true);
         GenesisBonding(contracts.genesisBonding).setPurchaseTokens(allowedGenesisTokens);
+        RiskManager(contracts.riskManager).setAssetConfig(
+            contracts.primaryToken,
+            priceFeed,
+            DEFAULT_HEARTBEAT,
+            true,
+            DEFAULT_DEPEG_MIN_BPS,
+            DEFAULT_DEPEG_MAX_BPS,
+            true
+        );
+        RiskManager(contracts.riskManager).setAssetConfig(
+            secondaryToken,
+            priceFeed,
+            DEFAULT_HEARTBEAT,
+            true,
+            DEFAULT_DEPEG_MIN_BPS,
+            DEFAULT_DEPEG_MAX_BPS,
+            true
+        );
         vm.stopBroadcast();
     }
 
@@ -1271,7 +1303,7 @@ contract SeedLocal is Script {
 
     // JSON fragment helpers kept separate to avoid a very large stack frame when composing
     // the final persisted file.
-    function _guardiansJson(Participants memory participants) internal view returns (string memory json) {
+    function _guardiansJson(Participants memory participants) internal pure returns (string memory json) {
         json = string(
             abi.encodePacked(
                 "{",
@@ -1293,7 +1325,7 @@ contract SeedLocal is Script {
         address[] memory guardian1Vaults,
         address[] memory guardian2Vaults,
         address[] memory adminGuardianVaults
-    ) internal view returns (string memory json) {
+    ) internal pure returns (string memory json) {
         json = string(
             abi.encodePacked(
                 "{",
@@ -1311,7 +1343,7 @@ contract SeedLocal is Script {
     }
 
     // Proposal ids are serialized as strings to avoid frontend issues with large uint256 values.
-    function _proposalIdsByStateJson(ProposalSeeds memory proposalSeeds) internal view returns (string memory json) {
+    function _proposalIdsByStateJson(ProposalSeeds memory proposalSeeds) internal pure returns (string memory json) {
         json = string(
             abi.encodePacked(
                 "{",
@@ -1343,7 +1375,7 @@ contract SeedLocal is Script {
 
     function _guardianApplicationProposalIdsJson(ProposalSeeds memory proposalSeeds)
         internal
-        view
+        pure
         returns (string memory json)
     {
         json = string(
@@ -1364,7 +1396,7 @@ contract SeedLocal is Script {
     }
 
     // Lightweight address array serializer used by the local seed snapshot.
-    function _addressArrayToJson(address[] memory values) internal view returns (string memory json) {
+    function _addressArrayToJson(address[] memory values) internal pure returns (string memory json) {
         json = "[";
 
         for (uint256 i = 0; i < values.length; i++) {

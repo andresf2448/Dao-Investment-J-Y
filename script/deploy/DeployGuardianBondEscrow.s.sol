@@ -11,7 +11,7 @@ contract DeployGuardianBondEscrow is Script {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;
-    address deployer = _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
+    _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
     address token = _token == address(0) ? networkConfig.allowedGenesisTokens[0] : _token;
 
     if (_treasury == address(0) || _guardianAdmin == address(0) || _timeLock == address(0)) {

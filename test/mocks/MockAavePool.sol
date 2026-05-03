@@ -42,9 +42,9 @@ contract MockAavePool {
     return amount;
   }
 
-  function getUserAccountData(address user)
+  function getUserAccountData(address /* user */)
     external
-    view
+    pure
     returns (
       uint256 totalCollateralBase,
       uint256 totalDebtBase,

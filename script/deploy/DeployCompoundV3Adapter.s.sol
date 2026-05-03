@@ -3,23 +3,23 @@ pragma solidity ^0.8.33;
 
 import {Script, console} from "forge-std/Script.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
-import {AaveV3Adapter} from "../../contracts/adapters/aave/AaveV3Adapter.sol";
+import {CompoundV3Adapter} from "../../contracts/adapters/compound/CompoundV3Adapter.sol";
 
-contract DeployAaveV3Adapter is Script {
+contract DeployCompoundV3Adapter is Script {
   function run(
     HelperConfig config,
     address _strategyRouter,
-    address _pool,
+    address _comet,
     address _deployer
-  ) 
+  )
     external
-    returns (AaveV3Adapter)
+    returns (CompoundV3Adapter)
   {
     HelperConfig.NetworkConfig memory networkConfig = config.getActiveNetworkConfig();
 
     uint256 deployerPrivateKey = networkConfig.deployerPrivateKey;
     _deployer == address(0) ? vm.addr(deployerPrivateKey) : _deployer;
-    address pool = _pool == address(0) ? networkConfig.aavePool : _pool;
+    address comet = _comet == address(0) ? networkConfig.compoundComet : _comet;
 
     if (_strategyRouter == address(0)) {
       console.log("Error: StrategyRouter address required");
@@ -27,13 +27,13 @@ contract DeployAaveV3Adapter is Script {
     }
 
     vm.startBroadcast(deployerPrivateKey);
-      AaveV3Adapter aaveV3Adapter = new AaveV3Adapter({
+      CompoundV3Adapter compoundV3Adapter = new CompoundV3Adapter({
         router_: _strategyRouter,
-        pool_: pool
+        comet_: comet
       });
     vm.stopBroadcast();
 
-    console.log("AaveV3Adapter deployed at:", address(aaveV3Adapter));
-    return aaveV3Adapter;
+    console.log("CompoundV3Adapter deployed at:", address(compoundV3Adapter));
+    return compoundV3Adapter;
   }
 }

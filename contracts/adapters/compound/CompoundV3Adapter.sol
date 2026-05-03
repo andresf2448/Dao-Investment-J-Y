@@ -5,17 +5,17 @@ import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 
 import {IStrategyAdapter} from "../../interfaces/adapters/IStrategyAdapter.sol";
 import {IVaultStrategyExecutor} from "../../interfaces/vaults/IVaultStrategyExecutor.sol";
-import {IAaveV3Pool} from "./interfaces/IAaveV3Pool.sol";
 import {CommonErrors} from "../../libraries/errors/CommonErrors.sol";
-import {IMockAavePool} from "../../../test/interfaces/IMockAavePool.sol";
+import {ICompoundV3Comet} from "./interfaces/ICompoundV3Comet.sol";
+import {IMockCompoundComet} from "../../../test/interfaces/IMockCompoundComet.sol";
 
-contract AaveV3Adapter is IStrategyAdapter {
+contract CompoundV3Adapter is IStrategyAdapter {
   enum Action {
     Deposit,
     Withdraw
   }
 
-  IAaveV3Pool private immutable pool;
+  ICompoundV3Comet private immutable comet;
   address public immutable router;
 
   event Executed(
@@ -25,21 +25,21 @@ contract AaveV3Adapter is IStrategyAdapter {
     uint256 amount
   );
 
-  error AaveV3Adapter__NotRouter();
-  error AaveV3Adapter__InvalidAction();
+  error CompoundV3Adapter__NotRouter();
+  error CompoundV3Adapter__InvalidAction();
 
   modifier onlyRouter() {
-    if (msg.sender != router) revert AaveV3Adapter__NotRouter();
+    if (msg.sender != router) revert CompoundV3Adapter__NotRouter();
     _;
   }
 
-  constructor(address router_, address pool_) {
-    if (router_ == address(0) || pool_ == address(0)) {
+  constructor(address router_, address comet_) {
+    if (router_ == address(0) || comet_ == address(0)) {
       revert CommonErrors.ZeroAddress();
     }
 
     router = router_;
-    pool = IAaveV3Pool(pool_);
+    comet = ICompoundV3Comet(comet_);
   }
 
   function execute(
@@ -51,7 +51,7 @@ contract AaveV3Adapter is IStrategyAdapter {
     if (amount == 0) revert CommonErrors.ZeroAmount();
 
     if (actionRaw > uint8(Action.Withdraw)) {
-      revert AaveV3Adapter__InvalidAction();
+      revert CompoundV3Adapter__InvalidAction();
     }
 
     address asset = IERC4626(vault).asset();
@@ -69,11 +69,11 @@ contract AaveV3Adapter is IStrategyAdapter {
     address vault,
     address asset
   ) external view override returns (uint256) {
-    return IMockAavePool(address(pool)).deposits(vault, asset);
+    return IMockCompoundComet(address(comet)).deposits(vault, asset);
   }
 
   function poolAddress() external view override returns (address) {
-    return address(pool);
+    return address(comet);
   }
 
   function _deposit(
@@ -83,16 +83,16 @@ contract AaveV3Adapter is IStrategyAdapter {
   ) internal {
     IVaultStrategyExecutor(vault).approveTokenFromRouter(
       asset,
-      address(pool),
+      address(comet),
       amount
     );
 
     IVaultStrategyExecutor(vault).executeFromRouter(
-      address(pool),
+      address(comet),
       0,
       abi.encodeCall(
-        IAaveV3Pool.supply,
-        (asset, amount, vault, 0)
+        ICompoundV3Comet.supply,
+        (asset, amount)
       )
     );
   }
@@ -103,11 +103,11 @@ contract AaveV3Adapter is IStrategyAdapter {
     uint256 amount
   ) internal {
     IVaultStrategyExecutor(vault).executeFromRouter(
-      address(pool),
+      address(comet),
       0,
       abi.encodeCall(
-        IAaveV3Pool.withdraw,
-        (asset, amount, vault)
+        ICompoundV3Comet.withdrawTo,
+        (vault, asset, amount)
       )
     );
   }

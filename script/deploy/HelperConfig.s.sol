@@ -10,6 +10,7 @@ contract HelperConfig is Script {
     address[] allowedGenesisTokens;
     uint256 deployerPrivateKey;
     address aavePool;
+    address compoundComet;
     string networkName;
     address allowedVaultToken;
     address mockV3Aggregator;
@@ -36,6 +37,7 @@ contract HelperConfig is Script {
       allowedVaultToken: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238,
       deployerPrivateKey: vm.envUint("SEPOLIA_PRIVATE_KEY"),
       aavePool: 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2,
+      compoundComet: 0xAec1F48e02Cfb822Be958B68C7957156EB3F0b6e,
       mockV3Aggregator: 0x694AA1769357215DE4FAC081bf1f309aDC325306,
       networkName: "sepolia"
     });
@@ -53,6 +55,7 @@ contract HelperConfig is Script {
       allowedVaultToken: address(0), // Placeholder, se reemplazará en cada deploy
       deployerPrivateKey: DEFAULT_ANVIL_PRIVATE_KEY,
       aavePool: address(0), // Placeholder, se reemplazará en cada deploy
+      compoundComet: address(0), // Placeholder, se reemplazará en cada deploy
       mockV3Aggregator: address(0), // Placeholder, se reemplazará en cada deploy
       networkName: "anvil"
     });
